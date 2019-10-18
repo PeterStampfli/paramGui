@@ -8,7 +8,7 @@
 
 /* jshint esversion:6 */
 
-function Button(idName) {
+export function Button(idName) {
     "use strict";
     this.idName = idName;
     this.element = document.getElementById(idName);
@@ -290,3 +290,5 @@ function Button(idName) {
     };
 
 }());
+
+window.Button=Button;

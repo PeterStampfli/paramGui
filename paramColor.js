@@ -1,5 +1,11 @@
 /* jshint esversion:6 */
 
+
+import {
+    paramControllerMethods,
+    DOM
+} from "./modules.js";
+
 /**
  * a controller for color
  * with visuals, in a common div
@@ -91,3 +97,7 @@ function ParamColor(gui, params, property) {
     ParamColor.prototype.remove = ParamColor.prototype.destroy;
 
 }());
+
+export {
+    ParamColor
+};

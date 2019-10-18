@@ -1,14 +1,24 @@
-/* jshint esversion:6 */
-
 /**
  * methods for all kind of (parameter) controllers
  * use Object.assign(.....prototype,paramControllerMethods);
  * @namespace paramControllerMethods
  */
 
-paramControllerMethods = {};
+/* jshint esversion:6 */
+import {
+    DOM,
+    SelectValues,
+    BooleanButton,
+    NumberButton,
+    Range,
+    TextInput,
+    Button
+} from "./modules.js";
+
+export const paramControllerMethods = {};
 
 (function() {
+
     "use strict";
     const px = "px";
 
@@ -172,7 +182,6 @@ paramControllerMethods = {};
         const id = DOM.createId();
         DOM.create("span", id, "#" + containerId);
         const range = Range.create(id);
-
         DOM.style("#" + range.idText,
             "width", design.numberInputWidth + px,
             "font-size", design.buttonFontSize + px,
@@ -233,7 +242,7 @@ paramControllerMethods = {};
      * @method paramControllerMethods.showPopup
      */
     paramControllerMethods.showPopup = function() {
-        if (isObject(this.popupDiv)) {
+        if (typeof this.popupDiv === "object") {
             console.log("show");
             this.popupDiv.style.display = "block";
         }
@@ -246,7 +255,6 @@ paramControllerMethods = {};
      * creates an onClick function on the controller div to open/keep visible the popup
      * the rootGui domElement has an onclick event that hides popups
      * @method paramControllerMethods.createPopup
-     * @return {Div} the popup div 
      */
     paramControllerMethods.createPopup = function() {
         this.popupDivId = DOM.createId();
@@ -261,7 +269,6 @@ paramControllerMethods = {};
             controller.showPopup();
             controller.doNotHidePopup = true;
         };
-        return this.popupDiv;
     };
 
     /**

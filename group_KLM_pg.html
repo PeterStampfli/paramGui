@@ -1,0 +1,150 @@
+
+<!DOCTYPE HTML> 
+<html lang="en"> 
+	<head> 
+		<title>KLM</title> 
+		<meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+		<style type="text/css"> 
+			body {
+				background-color: #000000;
+				margin: 0px;
+				//overflow: hidden;
+			}
+			a.button {
+				border-style: solid;
+				border-width: 1px;
+				background-color: #FFFFFF;	
+			}
+      div.glDiv {
+				position: relative;
+				margin: 1px;
+				//padding: 2px 2px 2px 2px;
+				float: left;
+				//box-sizing: border-box;
+				border-style: solid;
+				border-width: 3px;
+				border-color: #AAAAFFFF; 
+				background-color: #0000FF22; 
+			}
+		    canvas.glCanvas {
+				 display: block;  /* prevents scrollbar */
+				 position: absolute;
+				 width: 100vw;
+				 height: 100vh;
+		    }
+		    canvas.overlay {
+				display: block;  /* prevents scrollbar */
+				position: absolute;
+				width: 100vw;
+				height: 100vh;
+				background-color: #FF000000; 
+				border-color: #FF0000; 
+				border-style: solid;
+				border-width: 0px;
+		    }
+			
+			#canvas2 {
+				width:400px;
+				height:300px;			
+			}
+			#canvas3 {
+				width:200px;
+				height:400px;			
+			}
+      #info {
+				position: absolute;
+				top: 10px;
+				left: 10px;			
+			}
+		</style> 
+	</head> 
+  
+	<body> 
+ 		<script src="../library/lib/loadJS.js"></script>	
+ 		
+<script type="module" src="../library/libgui/paramGui.js"></script>
+	
+		<div>
+		<canvas id="canvas" class="glCanvas"></canvas>
+		<canvas id="overlay" class="overlay"></canvas>		
+		</div>
+		
+		<script type="text/javascript">   
+		
+const dat={};
+		
+window.onload=function(){
+    
+    var LIBRARY_PATH = '../library/';
+    
+    loadScripts(LIBRARY_PATH+'lib/', [
+  //    'dat.gui.min2.js',
+      'webgl_utils.js',
+      'twgl.js']);
+      
+    loadScripts(LIBRARY_PATH+'jslib/',[
+      'ComplexArithmetic.js',
+      'Utilities.js',
+      'SpatialHashMap.js',
+      'CanvasTransform.js',
+      'InversiveNavigator.js',
+      'GLFSRenderer.js',
+      'FilesLoader.js',
+      'FileLoader.js',
+      'Inversive.js',
+      'GroupRenderer.js',
+      'GroupRendererConfig.js',
+      'PatternTextures.js',
+      'DefaultDomainBuilder.js'      
+    ]);
+   
+    
+    loadScripts('jslib/', [
+      'Group_KLM.js',
+      'Textures.js'],
+      startProgram);
+    
+    // 
+    var preFolder = 'presets/KLM/';
+    var JSONpresets = [];
+    for(var i = 1; i < 45; i++){
+      JSONpresets[i-1] = {name:'set '+ i, path:preFolder+'set_' + ('0'+i).slice(-2) + '.json'};
+    }
+    
+    
+    function startProgram() {
+    
+      console.log('startProgram()');
+      console.time('startProgram');
+      var FRAG_PATH = LIBRARY_PATH + 'frag/';
+      
+      var render = new GroupRenderer({glCanvas:document.getElementById('canvas'),
+                      overlayCanvas:document.getElementById('overlay'),
+                      groupMaker: new Group_KLM(),
+                      MAX_GEN_COUNT:4,
+                      MAX_REF_COUNT:4,
+                      fragShader:[
+                        FRAG_PATH + 'fsMain.frag',
+                        FRAG_PATH + 'inversive.frag',
+                        FRAG_PATH + 'complex.frag',								
+                        FRAG_PATH + 'patternTextures.frag',
+                        FRAG_PATH + 'generalGroupMain.frag'
+                      ],
+                      //vertShader:["../library/frag/vertexShader.frag"]
+                      patternMaker:new PatternTextures({textures:[Textures.all,Textures.all,Textures.all,Textures.all]}),
+                      domainBuilder:new DefaultDomainBuilder(),                    
+                      //domainBuilder:new DirichletDomainBuilder(),                    
+                      JSONpresets:JSONpresets,
+                      useParamGui:true,                      
+                      });                                               
+      render.init();
+      //console.timeEnd('startProgram');
+		
+    }
+}
+    
+    
+		</script> 		
+	</body> 
+</html> 

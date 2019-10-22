@@ -12,7 +12,8 @@ import {
     NumberButton,
     Range,
     TextInput,
-    Button
+    Button,
+    ColorInput
 } from "./modules.js";
 
 export const paramControllerMethods = {};
@@ -61,9 +62,23 @@ export const paramControllerMethods = {};
         );
         // the button or whatever the user interacts with
         this.uiElement = null;
-        // what should be done if value changes or button clicked
+
+        /**
+         * instant callback for small changes
+         * @method paramControllerMethods.callback
+         * @param {anything} value
+         */
         this.callback = function(value) {
             console.log("callback value " + value);
+        };
+
+        /**
+         * final callback for changes of a large controller with multiple components
+         * @method paramControllerMethods.finishCallback
+         * @param {anything} value
+         */
+        this.finishCallback = function(value) {
+            console.log("finish callback value " + value);
         };
     };
 
@@ -88,6 +103,22 @@ export const paramControllerMethods = {};
     };
 
     //  creating basic controllers
+
+    /**
+     * create a bare styled color input
+     * @method paramControllerMethods.styledColorInput
+     * @param {String} containerId - id of the enclosing div 
+     * @return textInput
+     */
+    paramControllerMethods.styledColorInput = function(containerId) {
+        const design = this.gui.design;
+        const id = DOM.createId();
+        DOM.create("input", id, "#" + containerId);
+        DOM.style("#" + id,
+            "width", design.numberInputWidth + px);
+        const colorInput = new ColorInput(id);
+        return colorInput;
+    };
 
     /**
      * create a bare styled text input
@@ -122,7 +153,7 @@ export const paramControllerMethods = {};
     };
 
     /**
-     * create a bare styled boolean button, with minimum button width
+     * create a bare styled boolean button, width onoff button width
      * @method paramControllerMethods.styledBooleanButton
      * @param {String} containerId - id of the enclosing div 
      * @return button
@@ -273,6 +304,7 @@ export const paramControllerMethods = {};
 
     /**
      * set the callback function for onchange events
+     * will be called for any input changes
      * @method paramControllerMethods.onChange
      * @param {function} callback - function(value), with value of controller as argument
      * @return this
@@ -292,13 +324,17 @@ export const paramControllerMethods = {};
     paramControllerMethods.onClick = paramControllerMethods.onChange;
 
     /**
-     * set the callback function for onchange events, because it is the dat.gui api
+     * set the finish callback function for final onchange events
+     * this is for controllers with many components
+     * typically called after user clicks on "select"
      * @method paramControllerMethods.onFinishChange
      * @param {function} callback - function(value), with value of controller as argument
      * @return this
      */
-    paramControllerMethods.onFinishChange = paramControllerMethods.onChange;
-
+    paramControllerMethods.onFinishChange = function(callback) {
+        this.finishCallback = callback;
+        return this;
+    };
     // setting and getting values:
     // Be careful. Two different values, of the ui and the object.
     // they have to be synchronized

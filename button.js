@@ -123,7 +123,6 @@ export function Button(idName) {
                 }
             }
         } else {
-
             this.element.style.color = this.colorInactive;
             this.element.style.backgroundColor = this.backgroundColorInactive;
         }
@@ -291,4 +290,4 @@ export function Button(idName) {
 
 }());
 
-window.Button=Button;
+window.Button = Button;

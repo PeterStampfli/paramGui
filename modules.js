@@ -18,10 +18,6 @@
 // do not create globals without good cause
 
 
-/* jshint esversion:6 */
-
-
-
 export {
     MouseAndTouch,
     MouseEvents
@@ -37,11 +33,6 @@ export {
     Button
 }
 from "./button.js";
-
-export {
-    ColorInput
-}
-from "./colorInput.js";
 
 export {
     BooleanButton
@@ -73,16 +64,16 @@ export {
 }
 from "./angleScale.js";
 
-export {
-    DOM
-}
-from "./dom.js";
 
 export {
     paramControllerMethods
 }
 from "./paramControllerMethods.js";
 
+export {
+    ColorInput
+}
+from "./colorInput.js";
 
 export {
     ParamColor
@@ -99,3 +90,8 @@ export {
     ParamController
 }
 from "./paramController.js";
+
+export {
+    ParamGui
+}
+from "./paramGui.js";

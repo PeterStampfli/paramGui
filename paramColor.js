@@ -1,21 +1,24 @@
 /* jshint esversion:6 */
 
-
 import {
     paramControllerMethods,
-    DOM
+    ColorInput
 } from "./modules.js";
 
 /**
- * a controller for color
- * with visuals, in a common div
+ * a controller for color with visuals, in a common div
+ * created with input field for color code, color input element and range for alpha value
+ * depending on initial parameter value
+ * if it is a string of type #rgb or #rrggbb then it has no alpha channel
+ * if it is a string of type #rgba or #rrggbbaa then it has an alpha channel
+ *  (that should be safe because of different lengths of strings)
  * @creator ParamColor
  * @param {ParamGui} gui - the controller is in this gui
  * @param {Object} params - object that has the parameter as a field
  * @param {String} property - for the field of object to change, params[property]
  */
 
-function ParamColor(gui, params, property) {
+export function ParamColor(gui, params, property) {
     this.gui = gui;
     this.params = params;
     this.property = property;
@@ -23,90 +26,71 @@ function ParamColor(gui, params, property) {
     this.create();
 }
 
-(function() {
-    "use strict";
-    const px = "px";
+const px = "px";
 
-    // "inherit" paramControllerMethods:
-    //======================================
-    //
-    // this.createLabel
-    // this.setupOnChange
-    // this.hidePopup
-    // this.shoePopup
-    // this.hidePopup
-    // this.show
-    // this.onChange 
-    // this.onClick
-    // this.onFinishChange
-    // this.setValueOnly
-    // this.setValue
-    // this.getValue
-    // this.updateDisplay
-    // this.updateDisplayIfListening
-    // this.listening
-    // this.name
+// "inherit" paramControllerMethods:
+//======================================
+//
+// this.createLabel
+// this.setupOnChange
+// this.hidePopup
+// this.showPopup
+// this.hidePopup
+// this.show
+// this.onChange 
+// this.onClick
+// this.onFinishChange
+// this.setValueOnly
+// this.setValue
+// this.getValue
+// this.updateDisplay
+// this.updateDisplayIfListening
+// this.listening
+// this.name
 
-    Object.assign(ParamColor.prototype, paramControllerMethods);
+Object.assign(ParamColor.prototype, paramControllerMethods);
 
-    /**
-     * making a ui control element, same as in "lib/dat.gui.min2.js", one on each line
-     * call from creator function
-     * @method ParamController#create
-     */
-    ParamColor.prototype.create = function() {
-        this.initCreate();
-        const design = this.gui.design;
-        const paramValue = this.params[this.property];
-        const controller = this;
-        const type = (typeof paramValue);
-        if (type === "string") {
-            this.type = "css";
-        }
-        // the parameter value is a string thus make a text input button
-        this.createLabel(this.property);
-        const colorInput = this.styledColorInput(this.domElementId);
-        this.uiElement = colorInput;
-        colorInput.onInput = function() {
-            const value = colorInput.getValue();
-            controller.params[controller.property] = value;
-            controller.lastValue = value; // avoid unnecessary display update (listening)
-            controller.callback(value);
-        };
-        colorInput.onChange = function() {
-            const value = colorInput.getValue();
-            controller.finishCallback(value);
-        };
-        if (this.type === "css") {
-            colorInput.setValue(paramValue);
-        }
-        return this;
-    };
-
-    /**
-     * destroy the controller
-     * @method ParamColor#destroy
-     */
-    ParamColor.prototype.destroy = function() {
-        this.uiElement.destroy();
-        this.uiElement = null;
-        this.label.remove();
-        this.label = null;
-        this.domElement.remove();
-        this.domElement = null;
-        this.params = null;
-        this.callback = null;
-        this.gui = null;
-    };
-
-    /**
-     * same as destroy, but is in dat.gui api
-     * @method ParamController.remove
-     */
-    ParamColor.prototype.remove = ParamColor.prototype.destroy;
-
-}());
-
-export {
-    ParamColor
+/**
+ * make a text input , color input and range
+ assume that param value is correct color format
+ * @method ParamController#create
+ */
+ParamColor.prototype.create = function() {
+    this.initCreate();
+    const design = this.gui.design;
+    let color = this.params[this.property];
+    const controller = this;
+    this.createLabel(this.property);
+    const hasAlpha = ColorInput.hasAlpha(color);
+    const colorInput = new ColorInput(this.domElement, hasAlpha);
+    colorInput.setWidths(design.colorTextWidth, design.colorColorWidth, design.colorRangeWidth);
+    colorInput.setValue(color);
+    this.gui.bodyDiv.appendChild(this.domElement);
+    // get root
+    colorInput.setFontSize(this.gui.getRoot().domElement,design.buttonFontSize); // attention: reading offsetHeight !
+    this.uiElement = colorInput;
+    this.setupOnChange();
+    return this;
 };
+
+/**
+ * destroy the controller
+ * @method ParamColor#destroy
+ */
+ParamColor.prototype.destroy = function() {
+    this.uiElement.destroy();
+    this.uiElement = null;
+    this.label.remove();
+    this.label = null;
+    this.domElement.remove();
+    this.domElement = null;
+    this.params = null;
+    this.callback = null;
+    this.gui = null;
+};
+
+/**
+ * same as destroy, but is in dat.gui api
+ * @method ParamController.remove
+ */
+ParamColor.prototype.remove = ParamColor.prototype.destroy;

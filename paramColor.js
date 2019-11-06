@@ -65,11 +65,11 @@ ParamColor.prototype.create = function() {
     const colorInput = new ColorInput(this.domElement, hasAlpha);
     colorInput.setWidths(design.colorTextWidth, design.colorColorWidth, design.colorRangeWidth);
     colorInput.setValue(color);
-    this.gui.bodyDiv.appendChild(this.domElement);
     // get root
-    colorInput.setFontSize(this.gui.getRoot().domElement,design.buttonFontSize); // attention: reading offsetHeight !
+    colorInput.setFontSize(this.gui.getRoot().domElement, design.buttonFontSize); // attention: reading offsetHeight !
     this.uiElement = colorInput;
     this.setupOnChange();
+    this.gui.bodyDiv.appendChild(this.domElement);
     return this;
 };
 

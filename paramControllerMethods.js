@@ -11,6 +11,7 @@ import {
     Range,
     TextInput,
     Button,
+    InstantHelp,
     ColorInput,
     ParamGui
 } from "./modules.js";
@@ -46,12 +47,16 @@ paramControllerMethods.createLabel = function(text) {
  * @method paramControllerMethods.initCreate
  */
 paramControllerMethods.initCreate = function() {
+    this.helpButton = null;
     const design = this.gui.design;
     // create a div for all elements of the controller
     this.domElement = document.createElement("div");
     // make a regular spacing between elements
     this.domElement.style.paddingTop = design.paddingVertical + "px";
     this.domElement.style.paddingBottom = design.paddingVertical + "px";
+    // space at right between help button and border
+    this.domElement.style.paddingRight = design.labelSpacing + "px";
+
     // the button or whatever the user interacts with
     this.uiElement = null;
 
@@ -64,6 +69,20 @@ paramControllerMethods.initCreate = function() {
         console.log("callback value " + value);
     };
 };
+
+
+/**
+ * add a help alert
+ * @method paramControllerMethods.addHelp
+ * @param {String} message - with html markup
+ * @return this, for chaining
+ */
+paramControllerMethods.addHelp = function(message) {
+    this.helpButton = new InstantHelp(message, this.domElement);
+    this.helpButton.setFontSize(this.gui.design.buttonFontSize);
+    return this;
+};
+
 
 /**
  * connect the ui controller with the param object:

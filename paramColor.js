@@ -78,6 +78,9 @@ ParamColor.prototype.create = function() {
  * @method ParamColor#destroy
  */
 ParamColor.prototype.destroy = function() {
+    if (this.helpButton !== null) {
+        this.helpButton.destroy();
+    }
     this.uiElement.destroy();
     this.uiElement = null;
     this.label.remove();

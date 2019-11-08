@@ -35,6 +35,11 @@ export {
 from "./button.js";
 
 export {
+    InstantHelp
+}
+from "./instantHelp.js";
+
+export {
     BooleanButton
 }
 from "./booleanButton.js";

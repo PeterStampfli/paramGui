@@ -39,6 +39,7 @@ import {
     ParamColor,
     ParamAngle,
     ParamController,
+    ParamImageSelection,
     Button,
     InstantHelp
 } from "./modules.js";
@@ -89,6 +90,8 @@ export function ParamGui(params) {
 // do changes in your program
 // position (at corners)
 ParamGui.defaultDesign = {
+    // overall appearance
+    //------------------------------------------------------------
     // positioning, default top right corner
     // other corners are possible, as references
     verticalPosition: "top",
@@ -96,42 +99,23 @@ ParamGui.defaultDesign = {
     // shifting the position with respect to the corner
     verticalShift: 0,
     horizontalShift: 0,
-    // dimensions, in terms of pixels, if they should scale with window
-    // then change these fields in a resize function
     // width of the ui panel
     width: 400,
-    // be careful: the vertical scroll bar might hide things
-    // important for auto wrapping lines
-    scrollBarWidth: 10,
-    //ui element label spacing from border and to controls
-    labelSpacing: 8,
     // vertical spacing
     paddingVertical: 4,
+    // indentation witdh per folder level
+    levelIndent: 10,
     // width of border around ui panel
     borderWidth: 3, // set to zero to make border disappear
-    // height for the title div
-    titleHeight: 30,
-    // the same font(family) for everything ?!
-    fontFamily: "FontAwesome, FreeSans, sans-serif",
-    // fontsize for tile of gui/folder 
-    titleFontSize: 14,
-    titleFontWeight: "bold", // lighter, normal , bold, bolder, depending on font
-    // marking different folder levels
-    levelIndent: 10,
-    // width of the open/close button span, if too small collapses?
-    closeOpenButtonWidth: 30,
-
-    // default colors
-    // background (of controllers)
-    backgroundColor: "#eeeeee",
-    // color for text of controllers
-    textColor: "#444444",
     // color for the border of the ui panel
     borderColor: "#777777",
-    // color for top of folder with close/open button
-    titleColor: "#000000",
-    titleBackgroundColor: "#bbbbbb",
+    // basic background color
+    backgroundColor: "#eeeeee",
+    // the same font(family) for everything ?!
+    fontFamily: "FontAwesome, FreeSans, sans-serif",
 
+    // style for paragraph
+    //-------------------------------------------------
     // padding for paragraphs: free space at right (left: labelspacing)
     paragraphRightPadding: 10,
     // padding for paragraphs: free space at top (bottom: paddingVertical)
@@ -141,34 +125,56 @@ ParamGui.defaultDesign = {
     // fontsize for paragraphs
     paragraphFontSize: 14,
 
-    // defaults for controller dimensions
+    // style for gui-titles
+    //---------------------------------------------------------
+    // height for the title div
+    titleHeight: 30,
+    // fontsize for tile of gui/folder 
+    titleFontSize: 14,
+    titleFontWeight: "bold", // lighter, normal , bold, bolder, depending on font
+    // width of the open/close button span, if too small collapses?
+    closeOpenButtonWidth: 30,
+    // colors
+    titleColor: "#000000",
+    titleBackgroundColor: "#bbbbbb",
 
+    // style for controller labels
+    //----------------------------------------------------
+    //spacing from left border and to controls
+    labelSpacing: 8,
+    // (minimum) width for labels (horizontal alignement)
+    labelWidth: 80,
+    // fontsize for labels
+    labelFontSize: 16,
+
+    // style for simple controllers (defined in paramController.js)
+    //--------------------------------------
     // fontsize for buttons
     buttonFontSize: 12,
-    // vertical spacing: minimum height overall=== distance between baselines
-    //  if controller not too large/minHeight too low
-    minControllerHeight: 25,
-    // (minimum) width for labels (horizontal alignement)
-    controllerLabelWidth: 80,
-    // fontsize for labels
-    controllerLabelFontSize: 14,
-    // width (min) of on/off buttons
-    onOffButtonWidth: 60,
+    // width of boolean buttons
+    booleanButtonWidth: 60,
     // width for text input
     textInputWidth: 200,
     // width for number input
     numberInputWidth: 40,
-    // width of text element for colorInput
-    colorTextWidth: 60,
-    // width of color element for colorInput
-    colorColorWidth: 40,
-    // width of range element for colorInput
-    colorRangeWidth: 60,
     // length of slider for range element
-    rangeSliderLengthShort: 60,
+    rangeSliderLengthShort: 80,
     rangeSliderLengthLong: 120,
-    // diameter for circular controllers
-    controllerDiameter: 80
+
+    // style for the colorInput
+    //----------------------------
+    // width of text element
+    colorTextWidth: 70,
+    // width of color element
+    colorColorWidth: 70,
+    // width of range element
+    colorRangeWidth: 70,
+
+    // style for the image selection
+    //-------------------------------------
+    // size of the image
+    imageSelectWidth: 100,
+    imageSelectHeight: 100
 };
 
 // other parameters
@@ -178,6 +184,8 @@ ParamGui.zIndex = 5;
 //time in milliseconds between listening updates
 ParamGui.listeningInterval = 400;
 // keyboard character to hide/show all guis
+// Attention: should not interfere with usual text input (file names...)
+// should not be "tab" (switches between input elements)
 ParamGui.hideCharacter = "$";
 // width for spaces in px
 ParamGui.spaceWidth = 20;
@@ -460,6 +468,7 @@ ParamGui.prototype.setup = function() {
     // the ui elements go into their own div, the this.bodyDiv
     // append as child to this.domElement
     this.bodyDiv = document.createElement("div");
+    this.bodyDiv.style.backgroundColor = design.backgroundColor;
     if (this.isRoot()) {
         // the root element has to generate a div as containing DOMElement
         // everything is in this div
@@ -499,6 +508,7 @@ ParamGui.prototype.setup = function() {
         // the ui elements go into their own div, the this.bodyDiv
         // attach to dom after all changes
         this.bodyDiv = document.createElement("div");
+        this.bodyDiv.style.backgroundColor = design.backgroundColor;
         // indent and left border only if there is a title and/or open/close buttons
         if ((this.closeOnTop) || (this.name !== "")) {
             this.bodyDiv.style.borderLeft = "solid";
@@ -511,9 +521,6 @@ ParamGui.prototype.setup = function() {
     if (this.closeOnTop && this.closed) {
         this.close();
     }
-    // set colors of body
-    this.bodyDiv.style.color = design.textColor;
-    this.bodyDiv.style.backgroundColor = design.backgroundColor;
 };
 
 // hide and show might be used in a program to hide irrelevant parameters
@@ -700,6 +707,27 @@ ParamGui.prototype.add = function(params, property, low, high, step) {
  */
 ParamGui.prototype.addColor = function(params, property) {
     const controller = new ParamColor(this, params, property);
+    this.elements.push(controller);
+    return controller;
+};
+
+/**
+ * make a controller with an image selection
+ * choices as an object with (label: value pairs)
+ * for choosing images:
+ * set labels and image urls as two strings, key value pairs of an object choices={ "label1": "URL1", ...},
+ * for other uses (presets): image is only a label 
+ * then use an object made of labels (again as keys) and value objects with image and value fields
+ * this value field is actually choosen (the preset object), thus
+ * choices={"label1": {"image": "URL1", value: someData}, ...}
+ * @method ParamGui#addImageSelection
+ * @param {Object} params - object that has the parameter as a field
+ * @param {String} property - key for the field of params to change, params[property]
+ * @param {object} choices - see above
+ * @return {ParamController} object
+ */
+ParamGui.prototype.addImageSelection = function(params, property, choices) {
+    const controller = new ParamImageSelection(this, params, property, choices);
     this.elements.push(controller);
     return controller;
 };

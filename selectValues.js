@@ -27,7 +27,7 @@ export function SelectValues(parent) {
      * @method SelectValues#onChange
      */
     this.onChange = function() {
-        console.log("onchnage " + select.value);
+        console.log("onchange " + select.value);
     };
 
     /**
@@ -41,12 +41,25 @@ export function SelectValues(parent) {
     // hovering
     this.element.onmouseenter = function() {
         select.hover = true;
+        select.element.focus();
         select.updateStyle();
     };
 
     this.element.onmouseleave = function() {
         select.hover = false;
+        //select.element.blur();
         select.updateStyle();
+    };
+
+    this.element.onwheel = function(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (event.deltaY > 0) {
+            select.changeSelectedIndex(1);
+        } else {
+            select.changeSelectedIndex(-1);
+        }
+        return false;
     };
 }
 
@@ -115,21 +128,60 @@ SelectValues.prototype.setLabelsValues = function(selections) {
     }
 };
 
+/**
+ * set the index, limited to the actual range
+ * set the corresponding value
+ * option to call onChange
+ * @method SelectValues#setIndex
+ * @param {int} index
+ */
+SelectValues.prototype.setIndex = function(index, callOnChange = false) {
+    index = Math.max(0, Math.min(this.labels.length - 1, index));
+    this.element.selectedIndex = index;
+    this.value = this.values[index];
+    if (callOnChange) {
+        this.onChange();
+    }
+};
+
+/**
+ * change the selected index, restricted to lenght of this.labels
+ * call onChange only if changes
+ * @method SelectValues#changeSelectedIndex
+ * @param {integer} delta
+ */
+SelectValues.prototype.changeSelectedIndex = function(delta) {
+    let index = this.element.selectedIndex + delta;
+    index = Math.max(0, Math.min(this.labels.length - 1, index));
+    if (index !== this.element.selectedIndex) {
+        this.setIndex(index, true);
+    }
+};
 
 /**
  * set to one of the existing values, if not existing use first value
+ * sets corresponding label
+ * option to call onChange (callback)
  * @method SelectValues#setValue
  * @param {whatever} value
+ * @param {boolean} callOnChange - optional, default false
  */
-SelectValues.prototype.setValue = function(value) {
-    let index = 0;
-    for (let i = 0; i < this.values.length; i++) {
-        if (value === this.values[i]) {
-            index = i;
-        }
-    }
-    this.element.selectedIndex = index;
-    this.value = this.values[this.element.selectedIndex];
+SelectValues.prototype.setValue = function(value, callOnChange = false) {
+    const index = this.values.indexOf(value);
+    this.setIndex(index, callOnChange);
+};
+
+/**
+ * set to one of the existing labels, if not existing use first value
+ * sets corresponding value
+ * option to call onChange (callback)
+ * @method SelectValues#setLabel
+ * @param {string} label
+ * @param {boolean} callOnChange - optional, default false
+ */
+SelectValues.prototype.setLabel = function(label, callOnChange = false) {
+    const index = this.labels.indexOf(label);
+    this.setIndex(index, callOnChange);
 };
 
 /**
@@ -151,6 +203,8 @@ SelectValues.prototype.destroy = function() {
     this.element.onchange = null;
     this.element.onmouseenter = null;
     this.element.onmouseleave = null;
+    this.element.onwheel = null;
     this.element.remove();
     this.element = null;
+    this.onChange = null;
 };

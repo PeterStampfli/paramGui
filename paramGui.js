@@ -52,6 +52,7 @@ export function ParamGui(params) {
     this.name = "controls";
     this.load = null;
     this.parent = null;
+    this.helpButton = null;
     this.autoPlace = true;
     this.hideable = true;
     this.closed = false;
@@ -78,11 +79,65 @@ export function ParamGui(params) {
     for (i = 0; i < arguments.length; i++) {
         ParamGui.updateValues(design, arguments[i]);
     }
-    // in particular note that width decreases for sub(sub) folders
-    // because of indentation
-    // be careful: the vertical scroll bar might hide things
-    // use clientWidth for width inside
-    this.setup();
+    // a list of all folders, controllers and other elements
+    // must have a destroy method, an updateDisplayIfListening method
+    this.elements = [];
+    // the ui elements go into their own div, the this.bodyDiv
+    // append as child to this.domElement
+    this.bodyDiv = document.createElement("div");
+    this.bodyDiv.style.backgroundColor = design.backgroundColor;
+    if (this.isRoot()) {
+        // the root element has to generate a div as containing DOMElement
+        // everything is in this div
+        this.domElement = document.createElement("div");
+        this.domElement.style.width = design.width + "px";
+        this.domElement.style.fontFamily = design.fontFamily;
+        // the border around everything
+        this.domElement.style.borderWidth = design.borderWidth + "px";
+        this.domElement.style.borderStyle = "solid";
+        this.domElement.style.borderColor = design.borderColor;
+        // put the gui onto collection and top of stack
+        ParamGui.addRootGui(this);
+        // add the title
+        this.createTitle();
+        // autoPlacing the root gui domElement relative to one of the four corners
+        // and make the bodyDiv scrolling vertical, if needed
+        this.domElement.appendChild(this.bodyDiv);
+        if (this.autoPlace) {
+            this.domElement.style.position = "fixed";
+            this.domElement.style[design.verticalPosition] = design.verticalShift + "px";
+            this.domElement.style[design.horizontalPosition] = design.horizontalShift + "px";
+            // scroll in vertical direction: attention! overflowY="auto" makes that overflowX becomes "auto" too if it is "initial" or "visible"
+            // be careful: the vertical scroll bar might hide things
+            // take into account design.scrollBarWidth for auto wrapping lines
+            this.bodyDiv.style.overflowY = "auto";
+            this.bodyDiv.style.overflowX = "hidden";
+            document.body.appendChild(this.domElement);
+            this.resize();
+        } else {
+            document.body.appendChild(this.domElement);
+        }
+    } else {
+        // folders have the parent bodyDiv as container
+        this.domElement = this.parent.bodyDiv;
+        // add the title
+        this.createTitle();
+        // the ui elements go into their own div, the this.bodyDiv
+        // attach to dom after all changes
+        this.bodyDiv = document.createElement("div");
+        this.bodyDiv.style.backgroundColor = design.backgroundColor;
+        // indent and left border only if there is a title and/or open/close buttons
+        if ((this.closeOnTop) || (this.name !== "")) {
+            this.bodyDiv.style.borderLeft = "solid";
+            this.bodyDiv.style.borderColor = design.titleBackgroundColor;
+            this.bodyDiv.style.borderLeftWidth = design.levelIndent + "px";
+        }
+        this.domElement.appendChild(this.bodyDiv);
+    }
+    // close it initially? (has to be here, after creation of elements
+    if (this.closeOnTop && this.closed) {
+        this.close();
+    }
 }
 
 // add some defaults designs, especially styles
@@ -170,11 +225,28 @@ ParamGui.defaultDesign = {
     // width of range element
     colorRangeWidth: 70,
 
-    // style for the image selection
+    // style for the popup
+    //----------------------------
+
+    // style for the image selection/preset selection
     //-------------------------------------
-    // size of the image
-    imageSelectWidth: 100,
-    imageSelectHeight: 100
+    // the icon image
+    guiImageWidth: 40,
+    guiImageHeight: 40,
+    guiImageBorderWidth: 2,
+    guiImageBorderColor: "#bbbbbb",
+    // popup
+    popupImagesPerRow: 1,
+    popupImageWidth: 100,
+    popupImageHeight: 100,
+    popupImageTotalWidth: 120,
+    popupImageTotalHeight: 120,
+    popupImageBorderWidth: 3,
+    popupImageBorderWidthSelected: 6,
+    popupImageBorderColor: "#888888",
+    popupImageBorderColorNoIcon: "#ff6666",
+    // general popup style, other values than the gui
+    popupBackgroundColor: "#bbbbbb"
 };
 
 // other parameters
@@ -208,10 +280,10 @@ ParamGui.updateValues = function(toObject, fromObject) {
 
 /**
  * update ParamGui design defaults, using data of another object with the same key 
- * @method ParamGui.updateDefaults
+ * @method ParamGui.updateDefaultDesign
  * @param {Object} newValues
  */
-ParamGui.updateDefaults = function(newValues) {
+ParamGui.updateDefaultDesign = function(newValues) {
     ParamGui.updateValues(ParamGui.defaultDesign, newValues);
 };
 
@@ -457,70 +529,6 @@ ParamGui.prototype.resize = function() {
  */
 ParamGui.prototype.setZIndex = function(zIndex) {
     this.domElement.zIndex = zIndex + "";
-};
-
-ParamGui.prototype.setup = function() {
-    this.helpButton = null;
-    const design = this.design;
-    // a list of all folders, controllers and other elements
-    // must have a destroy method, an updateDisplayIfListening method
-    this.elements = [];
-    // the ui elements go into their own div, the this.bodyDiv
-    // append as child to this.domElement
-    this.bodyDiv = document.createElement("div");
-    this.bodyDiv.style.backgroundColor = design.backgroundColor;
-    if (this.isRoot()) {
-        // the root element has to generate a div as containing DOMElement
-        // everything is in this div
-        this.domElement = document.createElement("div");
-        this.domElement.style.width = design.width + "px";
-        this.domElement.style.fontFamily = design.fontFamily;
-        // the border around everything
-        this.domElement.style.borderWidth = design.borderWidth + "px";
-        this.domElement.style.borderStyle = "solid";
-        this.domElement.style.borderColor = design.borderColor;
-        // put the gui onto collection and top of stack
-        ParamGui.addRootGui(this);
-        // add the title
-        this.createTitle();
-        // autoPlacing the root gui domElement relative to one of the four corners
-        // and make the bodyDiv scrolling vertical, if needed
-        this.domElement.appendChild(this.bodyDiv);
-        if (this.autoPlace) {
-            this.domElement.style.position = "fixed";
-            this.domElement.style[design.verticalPosition] = design.verticalShift + "px";
-            this.domElement.style[design.horizontalPosition] = design.horizontalShift + "px";
-            // scroll in vertical direction: attention! overflowY="auto" makes that overflowX becomes "auto" too if it is "initial" or "visible"
-            // be careful: the vertical scroll bar might hide things
-            // take into account design.scrollBarWidth for auto wrapping lines
-            this.bodyDiv.style.overflowY = "auto";
-            this.bodyDiv.style.overflowX = "hidden";
-            document.body.appendChild(this.domElement);
-            this.resize();
-        } else {
-            document.body.appendChild(this.domElement);
-        }
-    } else {
-        // folders have the parent bodyDiv as container
-        this.domElement = this.parent.bodyDiv;
-        // add the title
-        this.createTitle();
-        // the ui elements go into their own div, the this.bodyDiv
-        // attach to dom after all changes
-        this.bodyDiv = document.createElement("div");
-        this.bodyDiv.style.backgroundColor = design.backgroundColor;
-        // indent and left border only if there is a title and/or open/close buttons
-        if ((this.closeOnTop) || (this.name !== "")) {
-            this.bodyDiv.style.borderLeft = "solid";
-            this.bodyDiv.style.borderColor = design.titleBackgroundColor;
-            this.bodyDiv.style.borderLeftWidth = design.levelIndent + "px";
-        }
-        this.domElement.appendChild(this.bodyDiv);
-    }
-    // close it initially? (has to be here, after creation of elements
-    if (this.closeOnTop && this.closed) {
-        this.close();
-    }
 };
 
 // hide and show might be used in a program to hide irrelevant parameters
@@ -862,6 +870,7 @@ ParamGui.prototype.destroy = function() {
         this.domElement.remove();
         this.domElement = null;
         ParamGui.removeRootGui(this);
+        window.removeEventListener("resize", ParamGui.resize, false);
     }
     // folder: remove from parent GUI 
     else {

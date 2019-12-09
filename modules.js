@@ -35,6 +35,16 @@ export {
 from "./button.js";
 
 export {
+    ImageButton
+}
+from "./imageButton.js";
+
+export {
+    Popup
+}
+from "./popup.js";
+
+export {
     InstantHelp
 }
 from "./instantHelp.js";
@@ -53,6 +63,11 @@ export {
     NumberButton
 }
 from "./numberButton.js";
+
+export {
+    Select
+}
+from "./select.js";
 
 export {
     SelectValues
@@ -90,6 +105,11 @@ export {
 from "./paramImageSelection.js";
 
 export {
+    ParamTwoNumbers
+}
+from "./paramTwoNumbers.js";
+
+export {
     ImageSelect
 }
 from "./imageSelect.js";
@@ -98,7 +118,6 @@ export {
     ParamAngle
 }
 from "./paramAngle.js";
-
 
 export {
     ParamController

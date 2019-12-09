@@ -1,229 +1,471 @@
 /**
- * a select input with images. It has two use cases:
- * - Select an (input) image: we can directly see the current image 
- *   and we can rapidly change it (scrolling with the mouse wheel)
- *   The selected value is the image URL
- * - Select something (such as a preset) that is better represented by an image 
- *   than a name. The name and the image are both shown. 
- *   The selected data is not the image URL, something else instead.
+ * a select input with icons
+ * each choice has a name, an icon and a value
+ * the value may be an URL for an image, a preset, ...
  * @constructor ImageSelect
  * @param {DOM element} parent, an html element, best "div"
+ * @param {...object} newDesign - modifying the default design
  */
 
+// note: close popup when using another ui input element
+//  simplify color picker
+
 import {
-    Button,
-    SelectValues
+    ImageButton,
+    Select,
+    Popup
 } from "./modules.js";
 
-export function ImageSelect(parent) {
+// add style parameter !!! -> design
+
+export function ImageSelect(parent, newDesign) {
     this.parent = parent;
-    // top level: at left a div with label, select and up/down buttons, including some spacing at left and right
-    this.leftDiv = document.createElement("div");
-    this.leftDiv.style.display = "inline-block";
-    this.leftDiv.style.verticalAlign = "bottom";
-
-    // for each item in the left div we make a new div, to be able to adjust spacing
-    this.buttonUpDiv = document.createElement("div");
-    this.buttonUpDiv.style.textAlign = "center";
-    this.buttonUp = new Button("▲", this.buttonUpDiv);
-    this.leftDiv.appendChild(this.buttonUpDiv);
-    this.buttonDownDiv = document.createElement("div");
-    this.buttonDownDiv.style.textAlign = "center";
-    this.buttonDown = new Button("▼", this.buttonDownDiv);
-    this.leftDiv.appendChild(this.buttonDownDiv);
-    //next below the label there is a select
-    this.selectDiv = document.createElement("div");
-    this.select = new SelectValues(this.selectDiv);
-    this.leftDiv.appendChild(this.selectDiv);
-    parent.appendChild(this.leftDiv);
-    this.firstSpace = document.createElement("div");
-    this.firstSpace.style.width = ImageSelect.spaceWidth + "px";
-    this.firstSpace.style.display = "inline-block";
-    this.parent.appendChild(this.firstSpace);
-
-    // at the right of input elements there is the small image (as selection result or alternative label)
-    this.image = document.createElement("img");
-    this.image.setAttribute("importance", "high");
-    this.image.src = null;
-    this.image.style.verticalAlign = "top";
-    this.image.style.objectFit = "contain";
-    this.image.style.objectPosition = "left top";
-    parent.appendChild(this.image);
+    this.design = {};
+    Object.assign(this.design, ImageSelect.defaultDesign);
+    for (var i = 1; i < arguments.length; i++) {
+        if (typeof arguments[i] === "object") {
+            updateValues(this.design, arguments[i]);
+        }
+    }
+    // the html elements in the main UI (not the popup)
+    // first a select 
+    this.select = new Select(parent);
+    this.select.setFontSize(this.design.guiFontSize);
+    // then a space (as a span ?)
+    // accessible from outside top be able to change style
+    this.space = document.createElement("span");
+    this.space.style.width = this.design.guiSpaceWidth + "px";
+    this.space.style.display = "inline-block";
+    this.parent.appendChild(this.space);
+    // at the right of input elements there is the small (icon) image of the selection
+    this.guiImage = document.createElement("img");
+    this.guiImage.setAttribute("importance", "high");
+    this.guiImage.style.verticalAlign = "middle";
+    this.guiImage.style.cursor = "pointer";
+    this.guiImage.style.height = this.design.guiImageHeight + "px";
+    this.guiImage.style.width = this.design.guiImageWidth + "px";
+    this.guiImage.style.border = "solid";
+    this.guiImage.style.borderStyle = "inset";
+    this.guiImage.style.borderColor = this.design.guiImageBorderColor;
+    this.guiImage.style.borderWidth = this.design.guiImageBorderWidth + "px";
+    this.guiImage.style.objectFit = "contain";
+    this.guiImage.style.objectPosition = "center center";
+    parent.appendChild(this.guiImage);
+    // here comes the popup
+    // the popup width that should be available for image buttons
+    this.design.popupInnerWidth = this.design.popupImageTotalWidth * this.design.popupImagesPerRow;
+    this.design.popupPadding = 0.5 * (this.design.popupImageTotalWidth - this.design.popupImageWidth);
+    this.popup = new Popup(this.design);
+    // make that the popup can get keyboard events
+    this.popup.mainDiv.setAttribute("tabindex", "-1");
+    this.popup.addCloseButton();
+    this.popup.close();
+    // the data
+    this.iconURLs = [];
+    this.values = [];
+    this.popupImages = [];
 
     // the actions
     const imageSelect = this;
 
-    this.buttonUp.onClick = function() {
-        imageSelect.select.changeSelectedIndex(1);
+    // events to make appear the image chooser popup:
+    // mousedown on select or icon image
+    // onChange on select or mouse wheel on icon image 
+    // (as all of them change choice)
+
+    this.select.onInteraction = function() {
+        imageSelect.interaction();
     };
 
-    this.buttonDown.onClick = function() {
-        imageSelect.select.changeSelectedIndex(-1);
+    this.guiImage.onmousedown = function() {
+        imageSelect.interaction();
+        return false;
     };
 
-    this.image.onwheel = function(event) {
+    // mousewheel on icon
+    this.guiImage.onwheel = function(event) {
         event.preventDefault();
         event.stopPropagation();
+        imageSelect.interaction();
         if (event.deltaY > 0) {
-            imageSelect.select.changeSelectedIndex(1);
+            imageSelect.select.changeIndex(1);
         } else {
-            imageSelect.select.changeSelectedIndex(-1);
+            imageSelect.select.changeIndex(-1);
+        }
+        return false;
+    };
+
+    function loadImagesForOpenPopup() {
+        if (imageSelect.popup.isOpen()) {
+            imageSelect.loadImages();
+        }
+    }
+    // scroll on popup may have to load images
+    this.popup.contentDiv.onscroll = loadImagesForOpenPopup;
+
+    window.addEventListener("resize", loadImagesForOpenPopup, false);
+
+    this.removeWindowEventListener = function() {
+        window.removeEventListener("resize", loadImagesForOpenPopup, false);
+    };
+
+    this.popup.mainDiv.onmouseenter = function() {
+        imageSelect.popup.mainDiv.focus(); // to be able to use mousewheel
+    };
+
+    // arrowkeys on popup
+    this.popup.mainDiv.onkeydown = function(event) {
+        let key = event.key;
+        let index = imageSelect.getIndex();
+        const buttonsPerRow = imageSelect.design.popupImagesPerRow;
+        if (key === "ArrowDown") {
+            event.preventDefault();
+            event.stopPropagation();
+            if (index + buttonsPerRow < imageSelect.popupImages.length) {
+                imageSelect.select.changeIndex(buttonsPerRow);
+            }
+        } else if (key === "ArrowUp") {
+            event.preventDefault();
+            event.stopPropagation();
+            if (index >= buttonsPerRow) {
+                imageSelect.select.changeIndex(-buttonsPerRow);
+            }
+        } else if (key === "ArrowRight") {
+            event.preventDefault();
+            event.stopPropagation();
+            if ((index % buttonsPerRow < buttonsPerRow - 1) && (index < imageSelect.popupImages.length - 1)) {
+                imageSelect.select.changeIndex(1);
+            }
+        } else if (key === "ArrowLeft") {
+            event.preventDefault();
+            event.stopPropagation();
+            if (index % buttonsPerRow > 0) {
+                imageSelect.select.changeIndex(-1);
+            }
         }
         return false;
     };
 
     // all events change the select element, if its value changes then update the image, the value of this and do some action
     this.select.onChange = function() {
-        imageSelect.updateImageValue();
+        imageSelect.update();
         imageSelect.onChange();
+    };
+
+    // the start of interaction function that changes the ui, in particular popups
+    this.onInteraction = function() {
+        console.log("interaction");
     };
 
     // the onChange function that does the action
     this.onChange = function() {
-        console.log("onChange imageSelect value: " + this.value);
+        console.log("onChange imageSelect value: " + this.getValue());
     };
 }
 
-// width for spaces in px
-ImageSelect.spaceWidth = 5;
+// default design
 
-/**
- * using link prefetch to preload images and accelerate response
- * works on google chrome and chromium
- * but not on firefox (see network tab of the debugger)
- * do not abuse (needs more reflection)
- * @function prefetchImage
- * @param {string} url
- */
-function prefetchImage(url) {
-    console.log("prefetch");
-    const prefetch = document.createElement("link");
-    prefetch.href = url;
-    prefetch.rel = "prefetch";
-    prefetch.as = "image";
-    prefetch.onload = function() {
-        console.log("loaded " + url);
-    };
-    document.head.appendChild(prefetch);
-}
-
-/**
- * set the spacing between ui elements in verical direction
- * @method ImageSelection#setVerticalSpacing
- * @param {int} space - in px
- */
-ImageSelect.prototype.setVerticalSpacing = function(space) {
-    this.buttonDownDiv.style.paddingTop = space + "px"; // spacing to next
-    this.buttonDownDiv.style.paddingBottom = 2 * space + "px"; // spacing to next
-    this.selectDiv.style.paddingBottom = 2 * space + "px"; // spacing to next
+ImageSelect.defaultDesign = {
+    // choosing images: the value is an image that can serve as icon, if there is no icon value
+    // ok, this is not really a design parameter, make an exception
+    choosingImages: true,
+    // for the static gui, not the popup
+    guiSpaceWidth: 5,
+    guiFontSize: 14,
+    guiImageWidth: 40,
+    guiImageHeight: 40,
+    guiImageBorderWidth: 2,
+    guiImageBorderColor: "#bbbbbb",
+    // for the popup, specific
+    popupImagesPerRow: 2,
+    popupImageWidth: 100,
+    popupImageHeight: 100,
+    popupImageTotalWidth: 120,
+    popupImageTotalHeight: 120,
+    popupImageBorderWidth: 3,
+    popupImageBorderWidthSelected: 6,
+    popupImageBorderColor: "#888888",
+    popupImageBorderColorNoIcon: "#ff6666",
+    // for the popup, general
+    // innerwidth and padding result from other data
+    popupFontFamily: "FontAwesome, FreeSans, sans-serif",
+    popupFontSize: 14,
+    popupBackgroundColor: "#aaaaaa",
+    popupBorderWidth: 3,
+    popupBorderColor: "#444444",
+    popupBorderRadius: 0,
+    popupShadowWidth: 0,
+    popupShadowBlur: 0,
+    popupZIndex: 20,
+    popupPosition: "bottomRight",
+    popupHorizontalShift: 0
 };
 
-/**
- * set label and select/button font sizes, button font sizes are increased
- * @method ImageSelect#setFontSize
- * @param {int} buttonSize - in pix
- */
-ImageSelect.prototype.setFontSize = function(buttonSize) {
-    this.select.setFontSize(buttonSize);
-    this.buttonUp.setFontSize(buttonSize);
-    this.buttonDown.setFontSize(buttonSize);
-};
+// changing design parameters
 
-/**
- * set the image size (limits)
- * @method ImageSelect.setImageSize
- * @param {int} width - in px
- * @param {int} height - in px
- */
-ImageSelect.prototype.setImageSize = function(width, height) {
-    this.image.style.width = width + "px";
-    this.image.style.height = height + "px";
-};
-
-/**
- * set image and value depending on selected index
- * @method ImageSelect#updateImageValue
- */
-ImageSelect.prototype.updateImageValue = function() {
-    const selectValue = this.select.value;
-    if (typeof selectValue === "string") {
-        this.image.src = selectValue;
-        this.value = selectValue;
-    } else {
-        this.image.src = selectValue.image;
-        this.value = selectValue.data;
-    }
-};
-
-/**
- * set the choices as key/value pairs of an object, 
- * the key is shown as text in the select input element.
- * - choosing images: The value is the URL string of the image. 
- *   We have a choices object with pairs of strings. choices={ label1: "URL1", ...};
- *   The selected value is the image URL string
- * - choosing other values (presets), the image is only a label.
- *   The choices object now has as values objects with an image and a data field.
- *   choices={label1: {image: "URL1", data: someData}, ...};
- *   The selected value is the data field.
- * the labels go to the this.select.labels array
- * the values (image URL strings or image/data objects) got to the this.select.values array
- * @method ImageSelect#setChoices
- * @param {Object} images
- */
-ImageSelect.prototype.setChoices = function(choices) {
-    this.select.setLabelsValues(choices);
-    this.select.setIndex(0, false);
-    this.updateImageValue();
-};
-
-/**
- * set the selection to a new value, without calling the callback
- * updating the shown image too, not only the label
- * if this.select.values items are (URL) strings 
- * then the newValue parameter has to be a string and we can use this.select.setValue(newValue) (searches for this.select.value===newValue)
- * if this.select.values items are objects then we have search for the values object with the same data
- * that means to find the selection index i with this.select.values[i].data===newValue
- * @method ImageSelect#setValue
- * @param {Object||string||simpleValue} newValue
- */
-ImageSelect.prototype.setValue = function(newValue) {
-    console.log(newValue);
-    if (typeof this.select.values[0] === "object") {
-        //search for the index with the correct object.value field
-        var index = this.select.values.length - 1;
-        while ((index >= 0) && (this.select.values[index].data !== newValue)) {
-            index--;
+function updateValues(toObject, fromObject) {
+    for (var key in fromObject) {
+        if ((typeof toObject[key] === typeof fromObject[key]) && (typeof fromObject[key] !== "function")) {
+            toObject[key] = fromObject[key];
         }
-        newValue = this.select.values[index]; // replace value by its {image: URL, data: some data} object
     }
-    this.select.setValue(newValue);
-    this.updateImageValue();
+}
+
+/**
+ * update Poipup design defaults, using data of another object with the same key 
+ * @method ImageSelect.updateDefaultDesign
+ * @param {Object} newValues
+ */
+ImageSelect.updateDefaultDesign = function(newValues) {
+    updateValues(ImageSelect.defaultDesign, newValues);
+};
+
+// default icons:
+// missing icon is a red image (data URL for red pixel)
+ImageSelect.missingIconURL = "data:image/gif;base64,R0lGODlhAQABAPABAP8SAAAAACH5BAAAAAAAIf4RQ3JlYXRlZCB3aXRoIEdJTVAALAAAAAABAAEAAAICRAEAOw==";
+// delayed loading (data url for grey pixel)
+ImageSelect.notLoadedURL = "data:image/gif;base64,R0lGODlhAQABAPABAJSUlAAAACH5BAAAAAAAIf4RQ3JlYXRlZCB3aXRoIEdJTVAALAAAAAABAAEAAAICRAEAOw==";
+
+/**
+ * load true (icon) images, only if visible in the popup
+ * @method ImageSelect#loadImages
+ */
+ImageSelect.prototype.loadImages = function() {
+    const length = this.popupImages.length;
+    const contentHeight = this.popup.contentDiv.offsetHeight;
+    const contentScroll = this.popup.contentDiv.scrollTop;
+    const imageHeight = this.popupImages[0].element.offsetHeight;
+    for (var i = 0; i < length; i++) {
+        const totalOffset = this.popupImages[i].element.offsetTop - contentScroll;
+        // partially visible: "upper" border of image above zero (lower border of content)
+        //                    AND "lower" border of image below "upper" border of content
+        if ((totalOffset + imageHeight > 0) && (totalOffset < contentHeight)) {
+            this.popupImages[i].setImageURL(this.iconURLs[i]);
+        }
+    }
+};
+
+/**
+ * make the choosen image in the popup visible, adjusts the scrollTop opf the popup.contentDiv
+ * #method ImageSelect#makeImageButtonVisible
+ * @param {ImageButton} imageButton
+ */
+ImageSelect.prototype.makeImageButtonVisible = function(imageButton) {
+    const contentHeight = this.popup.contentDiv.offsetHeight;
+    const contentScroll = this.popup.contentDiv.scrollTop;
+    const imageHeight = imageButton.element.offsetHeight;
+    const totalOffset = imageButton.element.offsetTop - contentScroll;
+    // check if not entirely visible
+    //"lower" border is below lower border of popup  
+    if (totalOffset < 0) {
+        this.popup.contentDiv.scrollTop = imageButton.element.offsetTop - 2 * this.design.popupPadding;
+    }
+    // higher border is above upper border of popup
+    else if (totalOffset + imageHeight > contentHeight) {
+        this.popup.contentDiv.scrollTop = imageButton.element.offsetTop + imageHeight - contentHeight + this.design.popupPadding;
+    }
+};
+
+/**
+ * start of interaction: load images instead of placeholders, 
+ * open popup, make choosen visible, call the onInteraction function
+ * @method ImageSelect#interaction
+ */
+ImageSelect.prototype.interaction = function() {
+    this.popup.open();
+    this.loadImages();
+    const index = this.getIndex(); // in case that parameter is out of range
+    if (index >= 0) {
+        this.makeImageButtonVisible(this.popupImages[index]);
+    }
+    this.onInteraction();
+};
+
+// loading icons/choices
+
+/**
+ * clear (delete) all choices
+ * @method ImageSelect#clearChoices
+ */
+ImageSelect.prototype.clearChoices = function() {
+    this.select.clear();
+    this.iconURLs.length = 0;
+    this.values.length = 0;
+    this.popupImages.forEach(button => button.destroy());
+    this.popupImages.length = 0;
+};
+
+/**
+ * adds choices, no varargs
+ */
+ImageSelect.prototype.add = function(choices) {
+    if (Array.isArray(choices)) { // an array
+        choices.forEach(choice => this.addChoices(choice));
+    } else {
+        const keys = Object.keys(choices);
+        // an object with many choices (key as name/ value as image url)
+        if ((keys.length > 3) || (typeof choices.name) === "undefined" || (typeof choices.value) === "undefined") {
+            // backwards compatibility, simpler setup
+            const choice = {};
+            const imageSelect = this;
+            keys.forEach(function(key) {
+                choice.name = key;
+                choice.icon = choices[key];
+                choice.value = choice.icon;
+                imageSelect.add(choice);
+            });
+        } else {
+            // adding a single option, we do not know if we have a valid icon
+            this.select.addOptions(choices.name);
+            const index = this.popupImages.length;
+            this.values.push(choices.value);
+            // assume worst case: no icon, no image
+            const button = new ImageButton(ImageSelect.missingIconURL, this.popup.contentDiv);
+            button.setBorderColor(this.design.popupImageBorderColorNoIcon);
+            this.popupImages.push(button);
+            const imageSelect = this;
+            button.onClick = function() {
+                if (imageSelect.getIndex() !== index) {
+                    imageSelect.setIndex(index);
+                    imageSelect.onChange();
+                }
+            };
+            // do we have an icon?
+            if (typeof choices.icon === "string") {
+                // all is well, we have an icon (assuming this is a picture url)
+                this.iconURLs.push(choices.icon);
+                // delayed loading
+                button.setImageURL(ImageSelect.notLoadedURL);
+                button.setBorderColor(this.design.popupImageBorderColor);
+            } else if ((this.design.choosingImages) && (typeof choices.value === "string")) {
+                // instead of the icon can use the image ( if the value is a jpg or png)
+                const valuePieces = choices.value.split(".");
+                const valueEnd = valuePieces[valuePieces.length - 1].toLowerCase();
+                if ((valueEnd === "jpg") || (valueEnd === "png")) {
+                    this.iconURLs.push(choices.value);
+                    button.setImageURL(ImageSelect.notLoadedURL);
+                } else {
+                    // no icon
+                    this.iconURLs.push(ImageSelect.missingIconURL);
+                }
+            } else {
+                // no icon
+                this.iconURLs.push(ImageSelect.missingIconURL);
+            }
+        }
+    }
+};
+
+/**
+ * add choices
+ * Attention: creates the image buttons for the popup, may take a lot of time
+ *  do this separately to save loading time
+ * each choice is an object with a name, icon and value field
+ * choice={name: "name as string", icon: "URL for icon image", value: whatever}
+ * the value can be an image URL, a preset (URL of json file)
+ * multiple choices are put together in an array, or repeated arguments
+ * for backwards compatibility:
+ * object { key: "imageURL string", ...}, where number of keys larger than 3, 
+ * or object.name===undefined, or object.value=undefined
+ * makes choices with {name: key, icon: imageURL, value: imageURL}
+ * @method ImageSelect#addChoices
+ * @param {... object|array} choice
+ */
+ImageSelect.prototype.addChoices = function(choices) {
+    // update the image button dimension according to the imageSelect design
+    const design = this.design;
+    const dimensions = {
+        imageWidth: design.popupImageWidth,
+        imageHeight: design.popupImageWidth,
+        borderWidth: design.popupImageBorderWidth,
+        totalWidth: design.popupImageTotalWidth,
+        totalHeight: design.popupImageTotalHeight,
+    };
+    ImageButton.newDimensions(dimensions);
+
+    const length = arguments.length;
+    for (var i = 0; i < length; i++) {
+        this.add(arguments[i]);
+    }
+    this.popup.resize();
+};
+
+/**
+ *  update the icon image, and more
+ * @method ImageSelect#update
+ */
+ImageSelect.prototype.update = function() {
+    const index = this.getIndex(); // in case that parameter is out of range
+    this.guiImage.src = this.iconURLs[index];
+    this.popupImages.forEach(button => button.setBorderWidth(this.design.popupImageBorderWidth));
+    if (index >= 0) {
+        const choosenButton = this.popupImages[index];
+        choosenButton.setBorderWidth(this.design.popupImageBorderWidthSelected);
+        this.makeImageButtonVisible(choosenButton);
+    }
+};
+
+// reading and setting choices
+
+/**
+ * get the index
+ * @method ImageSelect#getIndex
+ * @return integer, the selected index
+ */
+ImageSelect.prototype.getIndex = function() {
+    const result = this.select.getIndex();
+    return result;
+};
+
+/**
+ * set the index and update all displays
+ * does not call the onChange callback
+ * @method ImageSelect#setIndex
+ * @param {integer} index
+ */
+ImageSelect.prototype.setIndex = function(index) {
+    this.select.setIndex(index);
+    this.update();
 };
 
 /**
  * get the value
- * if this.select.value is a (URL) string  then it is the return value
- * if this.select.value is an objects then we have to return its data field
- * done in updateImageValue method
  * @method ImageSelect#getValue
- * @param {Object||string||simpleValue} value
+ * @return integer, the selected index
  */
 ImageSelect.prototype.getValue = function() {
-    return this.value;
+    const result = this.values[this.select.getIndex()];
+    return result;
 };
 
 /**
- * destroy this input element
+ * set the value and update display
+ * does not call the onChange callback
+ * @method ImageSelect#setValue
+ * @param {whatever} value
+ */
+ImageSelect.prototype.setValue = function(value) {
+    const index = this.values.indexOf(value);
+    this.setIndex(index);
+};
+
+
+
+/*
+ * destroy the image select (including popup and choices)
  * @method ImageSelect#destroy
  */
 ImageSelect.prototype.destroy = function() {
-    this.onChange = null;
-    this.image.onwheel = null;
-    this.image.onmouseover = null;
-    this.image.onkeydown = null;
-    this.image.remove();
+    this.clearChoices();
+    this.popup.mainDiv.onkeydown = null;
+    this.popup.contentDiv.onscroll = null;
+    this.popup.destroy();
     this.select.destroy();
-    this.buttonUp.destroy();
-    this.buttonDown.destroy();
-    this.leftDiv.remove();
+    this.space.remove();
+    this.guiImage.onmousedown = null;
+    this.guiImage.onwheel = null;
+    this.guiImage.remove();
+    this.removeWindowEventListener();
+    this.onChange = null;
+    this.onInteraction = null;
 };

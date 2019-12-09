@@ -5,18 +5,15 @@ import {
 
 /**
  * make a controller with an image selection
- * choices as an object with (label: value pairs)
- * for choosing images:
- * set labels and image urls as two strings, key value pairs of an object choices={ "label1": "URL1", ...},
- * for other uses (presets): image is only a label 
- * then use an object made of labels (again as keys) and value objects with image and value fields
- * this value field is actually choosen (the preset object), thus
- * choices={"label1": {"image": "URL1", value: someData}, ...}
+ * each choice is an object with a name, icon and value field
+ * choice={name: "name as string", icon: "URL for icon image", value: whatever}
+ * the value can be an image URL, a preset (URL of json file)
+ * multiple choices are put together in an array
  * @creator ParamImageSelection
  * @param {ParamGui} gui - the controller is in this gui
  * @param {Object} params - object that has the parameter as a field
  * @param {String} property - for the field of object to change, params[property]
- * @param {object} choices 
+ * @param {array} choices - an array of choice objects
  */
 
 export function ParamImageSelection(gui, params, property, choices) {
@@ -25,16 +22,44 @@ export function ParamImageSelection(gui, params, property, choices) {
     this.property = property;
     this.listening = false; // automatically update display
     this.initCreate(); // create this.domElement with padding
-        this.createLabel(this.property);
-        this.label.style.verticalAlign="top";
-    const imageSelect = new ImageSelect(this.domElement);
-    imageSelect.setChoices(choices);
-    imageSelect.setValue(this.params[this.property]);
-    const design = this.gui.design;
-    imageSelect.setFontSize(design.buttonFontSize);
-    imageSelect.setImageSize(design.imageSelectWidth, design.imageSelectHeight);
-imageSelect.setVerticalSpacing(design.paddingVertical);
+    this.createLabel(this.property);
+    this.label.style.verticalAlign = "middle";
 
+    const design = this.gui.design;
+    const newDesign = {
+        // image select gui part
+        guiSpaceWidth: design.labelSpacing,
+        guiFontSize: design.buttonFontSize,
+        guiImageWidth: design.guiImageWidth,
+        guiImageHeight: design.guiImageHeight,
+        guiImageBorderWidth: design.guiImageBorderWidth,
+        guiImageBorderColor: design.guiImageBorderColor,
+        // image select popup part
+        // design
+        popupFontFamily: design.fontFamily,
+        popupFontSize: design.labelFontSize,
+
+        popupBackgroundColor: design.popupBackgroundColor,
+        popupBorderWidth: design.borderWidth,
+        popupBorderColor: design.borderColor,
+        // popup buttons
+        popupImagesPerRow: design.popupImagesPerRow,
+        popupImageWidth: design.popupImageWidth,
+        popupImageHeight: design.popupImageHeight,
+        popupImageTotalWidth: design.popupImageTotalWidth,
+        popupImageTotalHeight: design.popupImageTotalHeight,
+        popupImageBorderWidth: design.popupImageBorderWidth,
+        popupImageBorderWidthSelected: design.popupImageBorderWidthSelected,
+    };
+    if (design.horizontalPosition === "right") {
+        newDesign.position = "bottomRight";
+    } else {
+        newDesign.position = "bottomLeft";
+    }
+    newDesign.popupHorizontalShift = design.width + design.horizontalShift;
+    const imageSelect = new ImageSelect(this.domElement, newDesign);
+    imageSelect.addChoices(choices);
+    imageSelect.setValue(this.params[this.property]);
     this.uiElement = imageSelect;
     this.setupOnChange();
     this.gui.bodyDiv.appendChild(this.domElement);
@@ -47,9 +72,6 @@ const px = "px";
 //
 // this.createLabel
 // this.setupOnChange
-// this.hidePopup
-// this.showPopup
-// this.hidePopup
 // this.show
 // this.onChange 
 // this.onClick

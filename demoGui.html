@@ -9,14 +9,15 @@
 
 <body>
 
-<div id="sq">test</div>
+<canvas id="sq">test</canvas>
 
 </body>
 
 <script type="module">
 
 import {
-    ParamGui
+    ParamGui,
+    InstantHelp
 }
 from "./modules.js"
 
@@ -31,6 +32,8 @@ const gui = new ParamGui({}, {
     closed: false,
     closeOnTop: true
 });
+
+InstantHelp.setStyle({position:"bottomRight"});
 
 gui.addHelp("This is a <strong>demo</strong>.");
 
@@ -48,17 +51,21 @@ gui.add(params,"letters",["alpha","beta","gamma","delta","epsilon"]);
 
 gui.addParagraph("There is a new image selection. It shows the choosen image or an image label:");
 
-const choices={
-	"haeckel01": "haeckel/haeckel_01.png",
-	"haeckel02": "haeckel/haeckel_02.png",
-	"haeckel03": "haeckel/haeckel_03.png",
-	"haeckel04": "haeckel/haeckel_04.png",
-	"haeckel05": "haeckel/haeckel_05.png",	
-};
+const haeckel="/images/libgui/haeckel/haeckel_";
 
-params.image="haeckel/haeckel_03.png";
+
+ const choices={};
+ for (var i=1;i<10;i++){
+    choices["haeckel0"+i]=haeckel+"0"+i+".png";
+ }
+ for (var i=10;i<20;i++){
+    choices["haeckel"+i]=haeckel+i+".png";
+ }
+
+params.image=22;
 
 gui.addImageSelection(params,"image",choices);
+
 
 gui.addParagraph("This color controller has an alpha channel. It controls the color and transparency of the square at the left:");
 
@@ -110,7 +117,30 @@ const folder = gui.addFolder("folder", {
 
 params.rgba = "#ff00ffbb";
 folder.addColor(params, "rgba");
+square.addEventListener("keydown", keylog, false);
 
+square.setAttribute('tabindex', '-1');
+
+square.addEventListener("keydown", stopTab, false);
+
+square.addEventListener("mouseenter", function(){ square.focus();}, false);
+
+function setFocus(){
+    square.focus();
+}
+
+
+function keylog(event) {
+    console.log("keylog: " + event.key);
+}
+
+function stopTab(event) {
+    if (event.key === "Tab") {
+        console.log("stopTab");
+        event.preventDefault();
+        event.stopPropagation();
+    }
+}
 
 </script>
 

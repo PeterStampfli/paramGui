@@ -36,6 +36,7 @@ The increment of value for each scroll changes the digit where the caret is.
  */
 
 import {
+    guiUtils,
     ParamColor,
     ParamAngle,
     ParamController,
@@ -45,6 +46,10 @@ import {
 } from "./modules.js";
 
 export function ParamGui(params) {
+    // a list of all folders, controllers and other elements
+    // must have a destroy method, an updateDisplayIfListening method
+    this.elements = [];
+    // styling
     var i;
     // copy default parameters, change later
     Object.assign(this, ParamGui.defaults);
@@ -60,7 +65,7 @@ export function ParamGui(params) {
     // read/merge params object replacing defaults
     // applies only to the parameters above
     for (i = 0; i < arguments.length; i++) {
-        ParamGui.updateValues(this, arguments[i]);
+        guiUtils.updateValues(this, arguments[i]);
     }
     // now this.parent is set, if different from null
     // we now know if we are
@@ -74,14 +79,17 @@ export function ParamGui(params) {
     } else {
         Object.assign(design, this.parent.design);
     }
-
     // update design parameters
     for (i = 0; i < arguments.length; i++) {
-        ParamGui.updateValues(design, arguments[i]);
+        guiUtils.updateValues(design, arguments[i]);
     }
-    // a list of all folders, controllers and other elements
-    // must have a destroy method, an updateDisplayIfListening method
-    this.elements = [];
+    // update the popup parameters depending on the gui position
+    if (design.horizontalPosition === "right") {
+        design.popupPosition = "bottomRight";
+    } else {
+        design.popupPosition = "bottomLeft";
+    }
+    design.popupHorizontalShift = design.width + design.horizontalShift;
     // the ui elements go into their own div, the this.bodyDiv
     // append as child to this.domElement
     this.bodyDiv = document.createElement("div");
@@ -145,6 +153,12 @@ export function ParamGui(params) {
 // do changes in your program
 // position (at corners)
 ParamGui.defaultDesign = {
+    // image select, loading user images
+    preferNewImageselect: true,
+    acceptUserImages: true,
+    addImageButtonText: "add images",
+    dropToPopupText: "Drop images here!",
+
     // overall appearance
     //------------------------------------------------------------
     // positioning, default top right corner
@@ -156,6 +170,8 @@ ParamGui.defaultDesign = {
     horizontalShift: 0,
     // width of the ui panel
     width: 400,
+    //spacing from left border and between controls
+    spaceWidth: 5,
     // vertical spacing
     paddingVertical: 4,
     // indentation witdh per folder level
@@ -195,12 +211,10 @@ ParamGui.defaultDesign = {
 
     // style for controller labels
     //----------------------------------------------------
-    //spacing from left border and to controls
-    labelSpacing: 8,
     // (minimum) width for labels (horizontal alignement)
     labelWidth: 80,
     // fontsize for labels
-    labelFontSize: 16,
+    labelFontSize: 14,
 
     // style for simple controllers (defined in paramController.js)
     //--------------------------------------
@@ -225,28 +239,32 @@ ParamGui.defaultDesign = {
     // width of range element
     colorRangeWidth: 70,
 
-    // style for the popup
-    //----------------------------
-
     // style for the image selection/preset selection
     //-------------------------------------
     // the icon image
-    guiImageWidth: 40,
-    guiImageHeight: 40,
+    guiImageWidth: 50,
+    guiImageHeight: 50,
     guiImageBorderWidth: 2,
     guiImageBorderColor: "#bbbbbb",
+    // for the image buttons
+    imageButtonWidth: 100,
+    imageButtonHeight: 100,
+    imageButtonTotalWidth: 120,
+    imageButtonTotalHeight: 120,
+    imageButtonBorderWidth: 3,
+    imageButtonBorderWidthSelected: 6,
+    imageButtonBorderColor: "#888888",
+    imageButtonBorderColorNoIcon: "#ff6666",
     // popup
-    popupImagesPerRow: 1,
-    popupImageWidth: 100,
-    popupImageHeight: 100,
-    popupImageTotalWidth: 120,
-    popupImageTotalHeight: 120,
-    popupImageBorderWidth: 3,
-    popupImageBorderWidthSelected: 6,
-    popupImageBorderColor: "#888888",
-    popupImageBorderColorNoIcon: "#ff6666",
-    // general popup style, other values than the gui
-    popupBackgroundColor: "#bbbbbb"
+    popupImagesPerRow: 1, // for choosing images, maybe larger for choosing presets
+    popupFontFamily: "FontAwesome, FreeSans, sans-serif", // fontFamily
+    popupFontSize: 14, // design.labelFontSize
+    popupBackgroundColor: "#bbbbbb",
+    popupBorderWidth: 3,
+    popupBorderColor: "#444444",
+    popupZIndex: 20,
+    // popupPosition: calculated from other data (depending on gui position)
+    //  popupHorizontalShift: calculated from other data
 };
 
 // other parameters
@@ -263,28 +281,12 @@ ParamGui.hideCharacter = "$";
 ParamGui.spaceWidth = 20;
 
 /**
- * updating existing fields of first object by fields of second object
- * both have to have the same type, which is not a function
- * use instead of Object.assign(to,from) to avoid copying ALL (unwanted) fields
- * @method ParamGui.updateValues
- * @param {Object} toObject (or Generator function)
- * @param {Object} fromObject (or generator function)
- */
-ParamGui.updateValues = function(toObject, fromObject) {
-    for (var key in fromObject) {
-        if ((typeof toObject[key] === typeof fromObject[key]) && (typeof fromObject[key] !== "function")) {
-            toObject[key] = fromObject[key];
-        }
-    }
-};
-
-/**
  * update ParamGui design defaults, using data of another object with the same key 
  * @method ParamGui.updateDefaultDesign
  * @param {Object} newValues
  */
 ParamGui.updateDefaultDesign = function(newValues) {
-    ParamGui.updateValues(ParamGui.defaultDesign, newValues);
+    guiUtils.updateValues(ParamGui.defaultDesign, newValues);
 };
 
 /**
@@ -353,6 +355,16 @@ ParamGui.isInFront = function(rootGui) {
 ParamGui.updateZIndices = function() {
     for (var i = 0; i < ParamGui.rootGuis.length; i++) {
         ParamGui.rootGuis[i].setZIndex(ParamGui.zIndex + i);
+    }
+};
+
+/**
+ * close all popups of all guis
+ * @method ParamGui.closePopup
+ */
+ParamGui.closePopup = function() {
+    for (var i = 0; i < ParamGui.rootGuis.length; i++) {
+        ParamGui.rootGuis[i].closePopup();
     }
 };
 
@@ -457,7 +469,7 @@ ParamGui.prototype.createTitle = function() {
         this.titleDiv.style.color = design.titleColor;
         this.titleDiv.style.paddingTop = design.paddingVertical + "px";
         this.titleDiv.style.paddingBottom = design.paddingVertical + "px";
-        this.titleDiv.style.paddingRight = design.labelSpacing + "px";
+        this.titleDiv.style.paddingRight = design.spaceWidth + "px";
         // for root gui make a border
         if (this.isRoot()) {
             this.titleDiv.style.borderBottomWidth = design.borderWidth + "px";
@@ -689,7 +701,7 @@ ParamGui.prototype.removeFolder = ParamGui.prototype.remove;
  * @return {ParamController} object, the controller
  */
 /*
- * if low is an object or array then make a selection
+ * if low is an object or array then make a selection or a new image select
  * if params[property] is undefined make a button (action defined by onClick method of the controller object
  * if params[property] is boolean make a booleanButton
  * if params[property] is a string make a text textInput  
@@ -700,8 +712,25 @@ ParamGui.prototype.removeFolder = ParamGui.prototype.remove;
  * (else) if params[property],low and high are numbers make a range element
  */
 
+
+// test if a variable is an object, not an array
+// excluding array and null
+function isObject(p) {
+    return ((typeof p) === "object") && (!Array.isArray(p)) && (p !== null);
+}
+
 ParamGui.prototype.add = function(params, property, low, high, step) {
-    const controller = new ParamController(this, params, property, low, high, step);
+    var controller;
+    // maybe prefer new image select
+    // if design option is true and low is an object (that defines choices)
+    // and first low.value is a good image file
+    let useNewSelect = (this.design.preferNewImageselect) && (isObject(low));
+    useNewSelect = useNewSelect && (guiUtils.isGoodImageFile(low[Object.keys(low)[0]]));
+    if (useNewSelect) {
+        controller = new ParamImageSelection(this, params, property, low);
+    } else {
+        controller = new ParamController(this, params, property, low, high, step);
+    }
     this.elements.push(controller);
     return controller;
 };
@@ -785,7 +814,7 @@ ParamGui.prototype.addVerticalSpace = function(height, backgroundColor) {
 ParamGui.prototype.addParagraph = function(innerHTML) {
     const para = document.createElement("div");
     para.style.margin = "none";
-    para.style.paddingLeft = this.design.labelSpacing + "px";
+    para.style.paddingLeft = this.design.spaceWidth + "px";
     para.style.paddingRight = this.design.paragraphRightPadding + "px";
     para.style.paddingTop = this.design.paragraphTopPadding + "px";
     para.style.paddingBottom = this.design.paddingVertical + "px";
@@ -824,7 +853,7 @@ ParamGui.prototype.getSaveObject = function() {
  * @param {Object} params - an object containing parameter values
  */
 ParamGui.prototype.remember = function(params) {
-    console.log("********ParamGui#remeber method not implemented");
+    console.log("********ParamGui#remember method not implemented");
 };
 
 /**
@@ -878,4 +907,10 @@ ParamGui.prototype.destroy = function() {
     }
 };
 
-self.ParamGui = ParamGui;
+/**
+ * close popups
+ * @method ParamGui#closePopup
+ */
+ParamGui.prototype.closePopup = function() {
+    this.elements.forEach(element => element.closePopup());
+};

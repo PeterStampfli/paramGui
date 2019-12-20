@@ -6,18 +6,25 @@
  * @constructor ImageButton
  * @param {String} imageURL
  * @param {DOM element} parent, an html element, best "div"
+ * @param {...object} newDesign - modifying the default design
  */
 
 import {
+    guiUtils,
     Button
 } from "./modules.js";
 
-export function ImageButton(imageURL, parent) {
+export function ImageButton(imageURL, parent, newDesign) {
+    this.design = {};
+    Object.assign(this.design, ImageButton.defaultDesign);
+    for (var i = 2; i < arguments.length; i++) {
+        guiUtils.updateValues(this.design, arguments[i]);
+    }
+    // basic element is an image
     this.element = document.createElement("img");
     this.element.style.cursor = "pointer";
     this.element.style.objectFit = "contain";
     this.element.style.objectPosition = "center center";
-    Object.assign(this, ImageButton.dimensions);
     this.setDimensions();
     parent.appendChild(this.element);
     this.setImageURL(imageURL);
@@ -38,10 +45,10 @@ export function ImageButton(imageURL, parent) {
     };
 
     /**
-     * action upon mouse down, strategy pattern
-     * @method Button#onMouseDown
+     * action upon mouse down, doing an interaction
+     * @method ImageButton#onInteraction
      */
-    this.onMouseDown = function() {};
+    this.onInteraction = function() {};
 
     // a list of actions....
 
@@ -50,7 +57,7 @@ export function ImageButton(imageURL, parent) {
     this.element.onmousedown = function() {
         button.pressed = true;
         button.updateStyle();
-        button.onMouseDown();
+        button.onInteraction();
     };
 
     this.element.onmouseup = function() {
@@ -74,21 +81,12 @@ export function ImageButton(imageURL, parent) {
 }
 
 // initial (default) dimensions, overwrite values
-ImageButton.dimensions = {
-    imageWidth: 100,
-    imageHeight: 100,
-    borderWidth: 3,
-    totalWidth: 120,
-    totalHeight: 120,
-};
-
-/**
- * update using new dimensions
- * @method ImageButton.newDimensions
- * @param {object} dimensions
- */
-ImageButton.newDimensions = function(dimensions) {
-    Object.assign(ImageButton.dimensions, dimensions);
+ImageButton.defaultDesign = {
+    imageButtonWidth: 100,
+    imageButtonHeight: 100,
+    imageButtonTotalWidth: 120,
+    imageButtonTotalHeight: 120,
+    imageButtonBorderWidth: 3
 };
 
 // background color for png images with a white motiv?
@@ -149,13 +147,14 @@ ImageButton.prototype.setImageURL = function(url) {
 // set style dimensions from known image sizes, border width and total sizes
 // adjusting the margins
 ImageButton.prototype.setDimensions = function() {
-    this.element.style.width = this.imageWidth + "px";
-    this.element.style.height = this.imageHeight + "px";
-    this.element.style.borderWidth = this.borderWidth + "px";
-    this.element.style.marginTop = 0.5 * (this.totalHeight - this.imageHeight) - this.borderWidth + "px";
-    this.element.style.marginBottom = 0.5 * (this.totalHeight - this.imageHeight) - this.borderWidth + "px";
-    this.element.style.marginLeft = 0.5 * (this.totalWidth - this.imageWidth) - this.borderWidth + "px";
-    this.element.style.marginRight = 0.5 * (this.totalWidth - this.imageWidth) - this.borderWidth + "px";
+    const design = this.design;
+    this.element.style.width = design.imageButtonWidth + "px";
+    this.element.style.height = design.imageButtonHeight + "px";
+    this.element.style.borderWidth = design.imageButtonBorderWidth + "px";
+    this.element.style.marginTop = 0.5 * (design.imageButtonTotalHeight - design.imageButtonHeight) - design.imageButtonBorderWidth + "px";
+    this.element.style.marginBottom = 0.5 * (design.imageButtonTotalHeight - design.imageButtonHeight) - design.imageButtonBorderWidth + "px";
+    this.element.style.marginLeft = 0.5 * (design.imageButtonTotalWidth - design.imageButtonWidth) - design.imageButtonBorderWidth + "px";
+    this.element.style.marginRight = 0.5 * (design.imageButtonTotalWidth - design.imageButtonWidth) - design.imageButtonBorderWidth + "px";
 };
 
 /**
@@ -166,9 +165,11 @@ ImageButton.prototype.setDimensions = function() {
  * @param {integer} height
  */
 ImageButton.prototype.setImageSize = function(width, height) {
-    this.imageWidth = width;
-    this.imageHeight = height;
-    this.setDimensions();
+    if ((this.design.imageButtonWidth !== width) || (this.design.imageButtonHeight !== height)) {
+        this.design.imageButtonWidth = width;
+        this.design.imageButtonHeight = height;
+        this.setDimensions();
+    }
 };
 
 /**
@@ -178,8 +179,8 @@ ImageButton.prototype.setImageSize = function(width, height) {
  * @param {integer} width
  */
 ImageButton.prototype.setBorderWidth = function(width) {
-    if (this.borderWidth !== width) {
-        this.borderWidth = width;
+    if (this.design.imageButtonBorderWidth !== width) {
+        this.design.imageButtonBorderWidth = width;
         this.setDimensions();
     }
 };
@@ -201,9 +202,11 @@ ImageButton.prototype.setBorderColor = function(color) {
  * @param {integer} height
  */
 ImageButton.prototype.setTotalSize = function(width, height) {
-    this.totalWidth = width;
-    this.totalHeight = height;
-    this.setDimensions();
+    if ((this.design.imageButtonTotalWidth !== width) || (this.design.imageButtonTotalHeight !== height)) {
+        this.design.imageButtonTotalWidth = width;
+        this.design.imageButtonTotalHeight = height;
+        this.setDimensions();
+    }
 };
 
 /**

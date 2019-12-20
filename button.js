@@ -28,20 +28,24 @@ export function Button(text, parent) {
      * action upon click, strategy pattern
      * @method Button#onClick
      */
-    this.onClick = function() {};
+    this.onClick = function() {
+        console.log("click");
+    };
 
     /**
-     * action upon mouse down, strategy pattern
-     * @method Button#onMouseDown
+     * action upon mouse down, doing an interaction
+     * @method Button#onInteraction
      */
-    this.onMouseDown = function() {};
+    this.onInteraction = function() {
+        console.log("Interaction");
+    };
 
     /**
      * action after loading a new input file for file input buttons
      * @method Button#onFileInput
-     * @param {File} file - input file object
+     * @param {File} files - array of (input) file objects
      */
-    this.onFileInput = function(file) {};
+    this.onFileInput = function(files) {};
 
     // a list of actions....
 
@@ -51,7 +55,7 @@ export function Button(text, parent) {
         if (button.active) {
             button.pressed = true;
             button.updateStyle();
-            button.onMouseDown();
+            button.onInteraction();
         }
     };
 
@@ -61,7 +65,7 @@ export function Button(text, parent) {
                 button.pressed = false;
                 button.onClick();
             }
-            button.element.blur();
+            button.element.blur(); // get rid of outline
             button.updateStyle();
         }
     };
@@ -225,7 +229,7 @@ Button.prototype.asFileInput = function(accept = ".jpg") {
     fileInput.setAttribute("accept", accept);
     let button = this;
     fileInput.onchange = function() {
-        button.onFileInput(fileInput.files[0]);
+        button.onFileInput(fileInput.files);
     };
     this.onClick = function() {
         button.fileInput.click();

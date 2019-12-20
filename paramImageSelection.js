@@ -1,6 +1,7 @@
 import {
     paramControllerMethods,
-    ImageSelect
+    ImageSelect,
+    ParamGui
 } from "./modules.js";
 
 /**
@@ -24,48 +25,28 @@ export function ParamImageSelection(gui, params, property, choices) {
     this.initCreate(); // create this.domElement with padding
     this.createLabel(this.property);
     this.label.style.verticalAlign = "middle";
-
-    const design = this.gui.design;
-    const newDesign = {
-        // image select gui part
-        guiSpaceWidth: design.labelSpacing,
-        guiFontSize: design.buttonFontSize,
-        guiImageWidth: design.guiImageWidth,
-        guiImageHeight: design.guiImageHeight,
-        guiImageBorderWidth: design.guiImageBorderWidth,
-        guiImageBorderColor: design.guiImageBorderColor,
-        // image select popup part
-        // design
-        popupFontFamily: design.fontFamily,
-        popupFontSize: design.labelFontSize,
-
-        popupBackgroundColor: design.popupBackgroundColor,
-        popupBorderWidth: design.borderWidth,
-        popupBorderColor: design.borderColor,
-        // popup buttons
-        popupImagesPerRow: design.popupImagesPerRow,
-        popupImageWidth: design.popupImageWidth,
-        popupImageHeight: design.popupImageHeight,
-        popupImageTotalWidth: design.popupImageTotalWidth,
-        popupImageTotalHeight: design.popupImageTotalHeight,
-        popupImageBorderWidth: design.popupImageBorderWidth,
-        popupImageBorderWidthSelected: design.popupImageBorderWidthSelected,
-    };
-    if (design.horizontalPosition === "right") {
-        newDesign.position = "bottomRight";
-    } else {
-        newDesign.position = "bottomLeft";
-    }
-    newDesign.popupHorizontalShift = design.width + design.horizontalShift;
-    const imageSelect = new ImageSelect(this.domElement, newDesign);
+    const imageSelect = new ImageSelect(this.domElement, this.gui.design);
     imageSelect.addChoices(choices);
     imageSelect.setValue(this.params[this.property]);
     this.uiElement = imageSelect;
-    this.setupOnChange();
     this.gui.bodyDiv.appendChild(this.domElement);
-}
+    this.setupOnChange();
 
-const px = "px";
+    // on interaction: call close popups, 
+    // mark that this image selection interacts, do not close its own popup
+
+    this.callsClosePopup = false;
+    const paramImageSelection = this;
+    imageSelect.onInteraction = function() {
+        paramImageSelection.onInteraction();
+    };
+
+    this.onInteraction = function() {
+        paramImageSelection.callsClosePopup = true;
+        ParamGui.closePopup();
+        paramImageSelection.callsClosePopup = false;
+    };
+}
 
 // "inherit" paramControllerMethods:
 //======================================
@@ -87,6 +68,18 @@ const px = "px";
 Object.assign(ParamImageSelection.prototype, paramControllerMethods);
 
 /**
+ * close the popup
+ * most controllers don't have a popup, thus this method stub does nothing
+ * overwrite for controllers with a popup
+ * @method ImageSelect.closePopup
+ */
+ParamImageSelection.prototype.closePopup = function() {
+    if (!this.callsClosePopup) {
+        this.uiElement.closePopup();
+    }
+};
+
+/**
  * destroy the controller
  * @method ParamImageSelection#destroy
  */
@@ -96,7 +89,6 @@ ParamImageSelection.prototype.destroy = function() {
     }
     this.uiElement.destroy();
     this.uiElement = null;
-
     this.domElement.remove();
     this.domElement = null;
     this.params = null;

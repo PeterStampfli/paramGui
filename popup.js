@@ -71,7 +71,7 @@ Popup.defaultDesign = {
     popupBorderWidth: 3,
     popupBorderColor: "#444444",
     popupBorderRadius: 20,
-    popupShadowWidth: 10,
+    popupShadowWidth: 5,
     popupShadowBlur: 10,
     popupShadowRed: 0,
     popupShadowGreen: 0,
@@ -193,14 +193,14 @@ Popup.prototype.setStyle = function(newStyle) {
     this.mainDiv.style.border = design.popupBorder;
     this.mainDiv.style.borderWidth = design.popupBorderWidth + "px";
     this.mainDiv.style.borderColor = design.popupBorderColor;
+    this.mainDiv.style.width = this.design.popupInnerWidth + this.design.popupScrollBarWidth + 2 * this.design.popupBorderWidth + "px";
     // the content div
     // no padding at the right, leaving flexibility/space for scroll bar
     this.contentDiv.style.paddingTop = design.popupPadding + "px";
     this.contentDiv.style.paddingLeft = design.popupPadding + "px";
     this.contentDiv.style.paddingBottom = design.popupPadding + "px";
-    this.contentDiv.style.width = this.design.popupInnerWidth + this.design.popupScrollBarWidth + "px";
     // the control div
-    if (this.design.popupHasControl) {
+    if (design.popupHasControl) {
         this.controlDiv.style.padding = design.popupPadding + "px";
         this.controlDiv.style.borderTop = design.popupBorder;
         this.controlDiv.style.borderTopWidth = design.popupBorderWidth + "px";

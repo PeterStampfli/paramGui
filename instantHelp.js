@@ -53,6 +53,18 @@ export function InstantHelp(content, parent) {
     };
 }
 
+// creating the popup, one for all
+
+InstantHelp.popup = new Popup({
+    popupHasControl: false,
+    popupInnerWidth: 400,
+    popupFontSize: 18,
+    popupBorder: "none"
+});
+
+InstantHelp.popup.close();
+InstantHelp.handleActiveColor = "#ffff88";
+
 /**
  * set fontsize of the handle, in px
  * @method InstantHelp#setFontSize
@@ -62,36 +74,11 @@ InstantHelp.prototype.setFontSize = function(size) {
     this.element.style.fontSize = size + "px";
 };
 
-
-// creating the popup, one for all
-
-InstantHelp.popup = new Popup({
-    hasControl: false
-});
-InstantHelp.popup.close();
-InstantHelp.handleActiveColor = "#ffff88";
-
 /**
  * set the styles, use if you change the style parameters
  * @method InstantHelp.setStyle
- * @param {...Object} newStyle - with parameter values that have to change, optional
+ * @param {...Object} newStyle - with those parameter values that change
  */
 InstantHelp.setStyle = function(newStyle) {
-    InstantHelp.popup.setStyle(newStyle.position);
+    InstantHelp.popup.setStyle(newStyle);
 };
-
-InstantHelp.defaultDesign = {
-    width: 300,
-    fontFamily: "FontAwesome, FreeSans, sans-serif",
-    fontSize: 18,
-    textColor: "#444444",
-    backgroundColor: "#ffffaa",
-    shadowWidth: 5,
-    shadowBlur: 10,
-    shadowAlpha: 0.7,
-    padding: 10,
-    zIndex: 20,
-    position: "center"
-};
-
-InstantHelp.setStyle(InstantHelp.defaultDesign);

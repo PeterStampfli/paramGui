@@ -33,8 +33,8 @@ paramControllerMethods.createLabel = function(text) {
     this.label.style.display = "inline-block";
     this.label.style.minWidth = design.labelWidth + "px";
     // space between label and controller or left border
-    this.label.style.paddingLeft = design.labelSpacing + "px";
-    this.label.style.paddingRight = design.labelSpacing + "px";
+    this.label.style.paddingLeft = design.spaceWidth + "px";
+    this.label.style.paddingRight = design.spaceWidth + "px";
     this.domElement.appendChild(this.label);
 };
 
@@ -55,7 +55,7 @@ paramControllerMethods.initCreate = function() {
     this.domElement.style.paddingTop = design.paddingVertical + "px";
     this.domElement.style.paddingBottom = design.paddingVertical + "px";
     // space at right between help button and border
-    this.domElement.style.paddingRight = design.labelSpacing + "px";
+    this.domElement.style.paddingRight = design.spaceWidth + "px";
 
     // the button or whatever the user interacts with
     this.uiElement = null;
@@ -70,7 +70,6 @@ paramControllerMethods.initCreate = function() {
     };
 };
 
-
 /**
  * add a help alert
  * @method paramControllerMethods.addHelp
@@ -82,7 +81,6 @@ paramControllerMethods.addHelp = function(message) {
     this.helpButton.setFontSize(this.gui.design.buttonFontSize);
     return this;
 };
-
 
 /**
  * connect the ui controller with the param object:
@@ -106,8 +104,20 @@ paramControllerMethods.setupOnChange = function() {
 };
 
 /**
+ * setup the onInteraction function of the ui element:
+ * calling the ParamGui.closePopup method
+ * @method paramControllerMethods.setupOnInteraction
+ */
+paramControllerMethods.setupOnInteraction = function() {
+    const element = this.uiElement;
+    element.onInteraction = function() {
+        ParamGui.closePopup();
+    };
+};
+
+/**
  * set the callback function for onchange events
- * will be called for any input changes
+ * this is DIFFERENT to my usual definition to be compatible with dat.gui
  * @method paramControllerMethods.onChange
  * @param {function} callback - function(value), with value of controller as argument
  * @return this
@@ -256,3 +266,11 @@ paramControllerMethods.show = function() {
     this.domElement.style.display = "block";
     return this;
 };
+
+/**
+ * for controllers with popup: close the popup
+ * most controllers don't have a popup, thus this method stub does nothing
+ * overwrite for controllers with a popup
+ * @method paramControllerMethods.closePopup
+ */
+paramControllerMethods.closePopup = function() {};

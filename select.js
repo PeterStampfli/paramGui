@@ -28,7 +28,6 @@ export function Select(parent) {
         console.log("onchange " + select.getIndex());
     };
 
-
     /**
      * action upon start of user interaction
      * @method Select#uponInteraction (open popup, close others)
@@ -44,7 +43,6 @@ export function Select(parent) {
         select.onChange();
     };
 
-
     // hovering
     this.element.onmouseenter = function() {
         select.hover = true;
@@ -57,10 +55,18 @@ export function Select(parent) {
         select.updateStyle();
     };
 
-    this.element.addEventListener("mousedown", function() {
-        console.log("select mousedown");
+    function interaction() {
         select.onInteraction();
-    });
+    }
+
+    this.element.addEventListener("mousedown", interaction, false);
+
+    this.element.addEventListener("keydown", interaction, false);
+
+    this.removeEvents = function() {
+        this.element.removeEventListener("mousedown", interaction, false);
+        this.element.removeEventListener("keydown", interaction, false);
+    };
 
     this.element.onwheel = function(event) {
         event.preventDefault();
@@ -197,6 +203,7 @@ Select.prototype.destroy = function() {
     this.element.onmouseenter = null;
     this.element.onmouseleave = null;
     this.element.onwheel = null;
+    this.removeEvents();
     this.element.remove();
     this.element = null;
     this.onChange = null;

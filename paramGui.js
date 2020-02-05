@@ -71,8 +71,8 @@ export function ParamGui(params) {
     // we now know if we are
     this.design = {};
     const design = this.design;
-    // now load default design parameters
-    // for a root gui it is the ParamGui.defaultDesign
+    // now load default design parameters into this design
+    // for a root gui it is the ParamGui.defaultDesign (there is no parent)
     // for a folder it is the parent design
     if (this.isRoot()) {
         Object.assign(design, ParamGui.defaultDesign);
@@ -89,7 +89,7 @@ export function ParamGui(params) {
     } else {
         design.popupPosition = "bottomLeft";
     }
-    design.popupHorizontalShift = design.width + design.horizontalShift;
+    design.popupHorizontalShift = design.width + design.horizontalShift + design.borderWidth;
     // the ui elements go into their own div, the this.bodyDiv
     // append as child to this.domElement
     this.bodyDiv = document.createElement("div");
@@ -148,12 +148,33 @@ export function ParamGui(params) {
     }
 }
 
+/**
+ * we might want to change design parameters for parts of a gui/folder
+ * @method ParamGui#changeDesign
+ * @param {...Object} design - design parameters as fields (key,value pairs) of objects, multiple objects possible
+ * @return this
+ */
+ParamGui.prototype.changeDesign = function(design) {
+    // update design parameters
+    for (var i = 0; i < arguments.length; i++) {
+        guiUtils.updateValues(this.design, arguments[i]);
+    }
+};
+
 // add some defaults designs, especially styles
 // styles, change the values of these fields if you do not like them
 // do changes in your program
 // position (at corners)
 ParamGui.defaultDesign = {
+    // controller for numbers
+    //==========================================
+    popupForNumberController: true,
+    popupMinWidth: 0,
+    indicatorColorLeft: "#dddddd",
+    indicatorColorRight: "#f8f8f8",
+
     // image select, loading user images
+    //===============================================
     preferNewImageselect: true,
     acceptUserImages: true,
     addImageButtonText: "add images",
@@ -229,6 +250,7 @@ ParamGui.defaultDesign = {
     // length of slider for range element
     rangeSliderLengthShort: 80,
     rangeSliderLengthLong: 120,
+    rangeSliderLengthVeryLong: 180,
 
     // style for the colorInput
     //----------------------------
@@ -255,14 +277,14 @@ ParamGui.defaultDesign = {
     imageButtonBorderWidthSelected: 6,
     imageButtonBorderColor: "#888888",
     imageButtonBorderColorNoIcon: "#ff6666",
-    // popup
+    // popup, those design parameters that have to be overwritten for message popup
     popupImagesPerRow: 1, // for choosing images, maybe larger for choosing presets
     popupFontFamily: "FontAwesome, FreeSans, sans-serif", // fontFamily
     popupFontSize: 14, // design.labelFontSize
-    popupBackgroundColor: "#bbbbbb",
+    popupBackgroundColor: "#cccccc",
     popupBorderWidth: 3,
-    popupBorderColor: "#444444",
-    popupZIndex: 20,
+    popupBorderColor: "#777777",
+    popupZIndex: 18,
     // popupPosition: calculated from other data (depending on gui position)
     //  popupHorizontalShift: calculated from other data
 };
@@ -278,7 +300,7 @@ ParamGui.listeningInterval = 400;
 // should not be "tab" (switches between input elements)
 ParamGui.hideCharacter = "$";
 // width for spaces in px
-ParamGui.spaceWidth = 20;
+ParamGui.spaceWidth = 7;
 
 /**
  * update ParamGui design defaults, using data of another object with the same key 
@@ -291,7 +313,7 @@ ParamGui.updateDefaultDesign = function(newValues) {
 
 /**
  * add a span with a space to the parent element
- * use NumberButton.spaceWidth as parameter !!!
+ * use ParamGui.spaceWidth as parameter !!!
  * @method ParamGui.addSpace
  * @param {HTMLElement} parent
  */
@@ -649,7 +671,7 @@ ParamGui.prototype.getRoot = function() {
  * add a folder, it is a gui instance
  * @method ParamGui#addFolder
  * @param {String} folderName
- * @param {...Object} designParameters - modifying the design
+ * @param {...Object} designParameters - modifying the design and other parameters
  * @return ParamGui instance (that's the folder)
  */
 ParamGui.prototype.addFolder = function(folderName, designParameters) {
@@ -691,64 +713,6 @@ ParamGui.prototype.remove = function(element) {
 ParamGui.prototype.removeFolder = ParamGui.prototype.remove;
 
 /**
- * add a controller for a parameter, depending on its value and limits
- * @method ParamGui#add
- * @param {Object} params - object that has the parameter as a field
- * @param {String} property - key for the field of params to change, params[property]
- * @param {float/integer/array} low - determines lower limit/choices (optional)
- * @param {float/integer} high - determines upper limit (optional)
- * @param {float/integer} step - determines step size (optional)
- * @return {ParamController} object, the controller
- */
-/*
- * if low is an object or array then make a selection or a new image select
- * if params[property] is undefined make a button (action defined by onClick method of the controller object
- * if params[property] is boolean make a booleanButton
- * if params[property] is a string make a text textInput  
- * if params[property] is a function make a button with this function as onClick method 
- * if params[property] and low are integer and high is undefined (thus step undefined too) make a numberbutton
- * if params[property],low and high are integer and step is undefined make a numberbutton
- * if params[property],low, and high are integer and step equals 1, make a range with plus and minus buttons 
- * (else) if params[property],low and high are numbers make a range element
- */
-
-
-// test if a variable is an object, not an array
-// excluding array and null
-function isObject(p) {
-    return ((typeof p) === "object") && (!Array.isArray(p)) && (p !== null);
-}
-
-ParamGui.prototype.add = function(params, property, low, high, step) {
-    var controller;
-    // maybe prefer new image select
-    // if design option is true and low is an object (that defines choices)
-    // and first low.value is a good image file
-    let useNewSelect = (this.design.preferNewImageselect) && (isObject(low));
-    useNewSelect = useNewSelect && (guiUtils.isGoodImageFile(low[Object.keys(low)[0]]));
-    if (useNewSelect) {
-        controller = new ParamImageSelection(this, params, property, low);
-    } else {
-        controller = new ParamController(this, params, property, low, high, step);
-    }
-    this.elements.push(controller);
-    return controller;
-};
-
-/**
- * make a controller for color
- * @method ParamGui#addColor
- * @param {Object} params - object that has the parameter as a field
- * @param {String} property - key for the field of params to change, params[property]
- * @return {ParamController} object
- */
-ParamGui.prototype.addColor = function(params, property) {
-    const controller = new ParamColor(this, params, property);
-    this.elements.push(controller);
-    return controller;
-};
-
-/**
  * make a controller with an image selection
  * choices as an object with (label: value pairs)
  * for choosing images:
@@ -764,7 +728,88 @@ ParamGui.prototype.addColor = function(params, property) {
  * @return {ParamController} object
  */
 ParamGui.prototype.addImageSelection = function(params, property, choices) {
-    const controller = new ParamImageSelection(this, params, property, choices);
+    const controllerDomElement = document.createElement("div");
+    // make a regular spacing between elements
+    controllerDomElement.style.paddingTop = this.design.paddingVertical + "px";
+    controllerDomElement.style.paddingBottom = this.design.paddingVertical + "px";
+    const controller = new ParamImageSelection(this, controllerDomElement, params, property, choices);
+    this.bodyDiv.appendChild(controllerDomElement);
+    this.elements.push(controller);
+    return controller;
+};
+
+/**
+ * add a controller for a parameter, one controller on a line, in its div
+ * depending on its value and limits
+ * @method ParamGui#add
+ * @param {Object} params - object that has the parameter as a field
+ * @param {String} property - key for the field of params to change, params[property]
+ * @param {float/integer/array} low - determines lower limit/choices (optional)
+ * @param {float/integer} high - determines upper limit (optional)
+ * @param {float/integer} step - determines step size (optional)
+ * @return {ParamController} object, the controller
+ */
+/*
+ * if low is an object or array then make a selection or a new image select
+ * if params[property] is undefined make a button (action defined by onClick method of the controller object
+ * if params[property] is boolean make a booleanButton
+ * if params[property] is a string make a text textInput  
+ * if params[property] is a function make a button with this function as onClick method 
+ * if params[property] is a number make a number button with lower and upper limits if defined, 
+ *                                 if step is not defined, then a step size is deduced from the parameter value
+ *                                 function buttons and range can be added to the domElement or the popup (if exists)
+ */
+
+/**
+ * adding a controller for a simple parameter
+ * with visuals, in a common div
+ * making a ui control element, same as in "lib/dat.gui.min2.js", one on a line
+ * uses new image select with popup instead of simple select if:
+ *     if design.preferNewImageselect is true and low is an object (that defines choices)
+ *     and first low.value is a good image file
+ * @method ParamGui#add
+ * @param {Object} params - object that has the parameter as a field
+ * @param {String} property - for the field of object to change, params[property]
+ * @param {float/integer/array} low - determines lower limit/choices (optional)
+ * @param {float/integer} high - determines upper limit (optional)
+ * @param {float/integer} step - determines step size (optional)
+ */
+ParamGui.prototype.add = function(params, property, low, high, step) {
+    // see if we use the new image select:
+    // if design option is true and low is an object (that defines choices)
+    // and first low.value is a good image file
+    let useNewSelect = (this.design.preferNewImageselect) && (guiUtils.isObject(low));
+    useNewSelect = useNewSelect && (guiUtils.isGoodImageFile(low[Object.keys(low)[0]])); //first property of low is an image file
+    if (useNewSelect) {
+        // use the new image select
+        return this.addImageSelection(params, property, low);
+    } else {
+        const controllerDomElement = document.createElement("div");
+        // make a regular spacing between elements
+        controllerDomElement.style.paddingTop = this.design.paddingVertical + "px";
+        controllerDomElement.style.paddingBottom = this.design.paddingVertical + "px";
+        const controller = new ParamController(this, controllerDomElement, params, property, low, high, step);
+        // change dom after all work has been done
+        this.bodyDiv.appendChild(controllerDomElement);
+        this.elements.push(controller);
+        return controller;
+    }
+};
+
+/**
+ * make a controller for color
+ * @method ParamGui#addColor
+ * @param {Object} params - object that has the parameter as a field
+ * @param {String} property - key for the field of params to change, params[property]
+ * @return {ParamController} object
+ */
+ParamGui.prototype.addColor = function(params, property) {
+    const controllerDomElement = document.createElement("div");
+    // make a regular spacing between elements
+    controllerDomElement.style.paddingTop = this.design.paddingVertical + "px";
+    controllerDomElement.style.paddingBottom = this.design.paddingVertical + "px";
+    const controller = new ParamColor(this, controllerDomElement, params, property);
+    this.bodyDiv.appendChild(controllerDomElement);
     this.elements.push(controller);
     return controller;
 };
@@ -872,7 +917,8 @@ ParamGui.prototype.revert = function(params) {
 ParamGui.prototype.destroy = function() {
     // destroy the ui elements and folders
     for (var i = this.elements.length - 1; i >= 0; i--) {
-        // attention: destroying folders remove themselves from this array
+        // attention: destroying folders remove themselves from this array, makes array smaller
+        // this is safe (no danger of not destroying an element, or out of array boundary error)
         this.elements[i].destroy();
     }
     this.elements.length = 0;

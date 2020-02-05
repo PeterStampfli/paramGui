@@ -7,20 +7,25 @@
  * @param {DOM element} parent, an html element, best "div"
  */
 
+import {
+    guiUtils
+} from "./modules.js";
+
 export function Button(text, parent) {
     this.element = document.createElement("button");
-    parent.appendChild(this.element);
+    guiUtils.style(this.element)
+        .borderRadius(1000 + "px")
+        .outline("none")
+        .cursor("pointer")
+        .verticalAlign("middle")
+        .parent(parent);
     this.setText(text);
-    this.element.style.borderRadius = "1000px"; // semicircle
-    this.element.style.outline = "none";
-    this.element.style.verticalAlign = "middle";
     // states
     this.pressed = false;
     this.hover = false;
     this.active = true; // allows switching off
     this.colorStyleDefaults();
     this.updateStyle();
-    this.element.style.cursor = "pointer";
     this.element.disabled = false;
     this.isFileInput = false;
 
@@ -109,24 +114,29 @@ Button.prototype.updateStyle = function() {
     if (this.active) {
         if (this.pressed) {
             if (this.hover) {
-                this.element.style.color = this.colorDownHover;
-                this.element.style.backgroundColor = this.backgroundColorDownHover;
+                guiUtils.style(this.element)
+                    .color(this.colorDownHover)
+                    .backgroundColor(this.backgroundColorDownHover);
             } else {
-                this.element.style.color = this.colorDown;
-                this.element.style.backgroundColor = this.backgroundColorDown;
+                guiUtils.style(this.element)
+                    .color(this.colorDown)
+                    .backgroundColor(this.backgroundColorDown);
             }
         } else {
             if (this.hover) {
-                this.element.style.color = this.colorUpHover;
-                this.element.style.backgroundColor = this.backgroundColorUpHover;
+                guiUtils.style(this.element)
+                    .color(this.colorUpHover)
+                    .backgroundColor(this.backgroundColorUpHover);
             } else {
-                this.element.style.color = this.colorUp;
-                this.element.style.backgroundColor = this.backgroundColorUp;
+                guiUtils.style(this.element)
+                    .color(this.colorUp)
+                    .backgroundColor(this.backgroundColorUp);
             }
         }
     } else {
-        this.element.style.color = this.colorInactive;
-        this.element.style.backgroundColor = this.backgroundColorInactive;
+        guiUtils.style(this.element)
+            .color(this.colorInactive)
+            .backgroundColor(this.backgroundColorInactive);
     }
 };
 
@@ -168,12 +178,31 @@ Button.prototype.setWidth = function(width) {
 };
 
 /**
+ * set minimumwidth of the button, in px
+ * @method Button#setMinWidth
+ * @param {integer} width
+ */
+Button.prototype.setMinWidth = function(width) {
+    this.element.style.minWidth = width + "px";
+};
+
+/**
  * set the text of the button
  * @method Button#setText
  * @param {String} text
  */
 Button.prototype.setText = function(text) {
     this.element.textContent = text;
+};
+
+/**
+ * set margin in px
+ * @method Button.setMargin
+ * @param {int} margin
+ */
+Button.prototype.setMargin = function(margin) {
+    this.element.style.marginRight = margin + "px";
+    this.element.style.marginLeft = margin + "px";
 };
 
 /**
@@ -223,10 +252,11 @@ Button.prototype.asFileInput = function(accept = ".jpg") {
     this.isFileInput = true;
     const fileInput = document.createElement("input");
     this.fileInput = fileInput;
-    fileInput.setAttribute("type", "file");
-    fileInput.style.display = "none";
-    document.querySelector("body").appendChild(fileInput);
-    fileInput.setAttribute("accept", accept);
+    guiUtils.style(fileInput)
+        .attribute("type", "file")
+        .attribute("accept", accept)
+        .display("none")
+        .parent(document.body);
     let button = this;
     fileInput.onchange = function() {
         button.onFileInput(fileInput.files);
@@ -279,4 +309,20 @@ Button.disable = function(buttons) {
     for (var i = 0; i < arguments.length; i++) {
         arguments[i].setActive(false);
     }
+};
+
+/**
+ * open the button
+ * @method Button#open
+ */
+Button.prototype.open = function() {
+    guiUtils.displayInlineBlock(this.element);
+};
+
+/**
+ * close the button
+ * @method Button#close
+ */
+Button.prototype.close = function() {
+    guiUtils.displayNone(this.element);
 };

@@ -1,11 +1,13 @@
 /**
  * a popup for dialogues and messages
  * similar to the color chooser
+ * it has a contentdiv (scrolling, with variable content) and an optional controldiv (mainly close button)
  * @constructor Popup
- * @param {...object} newDesign - modifying the default design
+ * @param {...object} newDesign - modifying the default design, multiple designs possible
  */
 import {
-    Button
+    Button,
+    guiUtils
 } from "./modules.js";
 
 export function Popup(newDesign) {
@@ -23,6 +25,7 @@ export function Popup(newDesign) {
     this.contentDiv = document.createElement("div");
     this.contentDiv.style.overflowY = "auto";
     this.contentDiv.style.overflowX = "hidden";
+    this.contentDiv.style.textAlign = "center";
     this.mainDiv.appendChild(this.contentDiv);
 
     // creating the control div, if there is one
@@ -36,6 +39,8 @@ export function Popup(newDesign) {
     document.body.appendChild(this.mainDiv);
 
     // resizing maxheight to fit window
+    // resizing maxWidth to fit window if there is no fixed with (design.popupInnerWidth=0)
+    // this maxWidth=0;                       ( in case that we need the resulting maxWidth)
     const popup = this;
 
     function autoResize() {
@@ -60,7 +65,9 @@ testDiv.remove();
 
 Popup.defaultDesign = {
     popupHasControl: true, // if it has a control div
-    popupInnerWidth: 300, // the minimal usable client width inside, even if there is a scroll bar
+    popupInnerWidth: 300, // the minimal usable client width inside, even if there is a scroll bar, 
+    // put to zero if no fixed width
+    popupMinWidth: 200, // minimum width if no fixed inner width
     popupScrollBarWidth: scrollBarWidth, // estimate for scroll bar width, valid for all?
     popupFontFamily: "FontAwesome, FreeSans, sans-serif",
     popupFontSize: 14,
@@ -78,8 +85,8 @@ Popup.defaultDesign = {
     popupShadowBlue: 0,
     popupShadowAlpha: 0.7,
     popupZIndex: 20,
-    popupPosition: "center",
-    popupHorizontalShift: 0
+    popupPosition: "center", // topLeft, topRight, bottomLeft, bottomRight
+    popupHorizontalShift: 0 // shift from left/right side
 };
 
 // changing design parameters
@@ -143,7 +150,8 @@ Popup.prototype.resize = function() {
     if (noShow) {
         this.open();
     }
-    let maxHeight = document.documentElement.clientHeight - 2 * (this.design.popupShadowBlur + this.design.popupShadowWidth);
+    const totalShadowWidth = this.design.popupShadowBlur + this.design.popupShadowWidth;
+    let maxHeight = document.documentElement.clientHeight - 2 * totalShadowWidth;
     // content div as seen in the main div extends from 0 to controlDiv.offsetTop
     // it includes the height, paddings and border
     maxHeight -= 2 * (this.design.popupBorderWidth + this.design.popupPadding);
@@ -151,6 +159,13 @@ Popup.prototype.resize = function() {
         maxHeight -= this.controlDiv.offsetHeight;
     }
     this.contentDiv.style.maxHeight = maxHeight + "px";
+    if (this.design.popupInnerWidth <= 0) {
+        this.maxWidth = document.documentElement.clientWidth - this.design.popupHorizontalShift;
+        this.maxWidth -= 2 * this.design.popupBorderWidth + 2 * totalShadowWidth;
+        this.mainDiv.style.maxWidth = this.maxWidth + "px";
+        this.mainDiv.style.minWidth = this.design.popupMinWidth + "px";
+    }
+
     if (noShow) {
         this.close();
     }
@@ -193,12 +208,14 @@ Popup.prototype.setStyle = function(newStyle) {
     this.mainDiv.style.border = design.popupBorder;
     this.mainDiv.style.borderWidth = design.popupBorderWidth + "px";
     this.mainDiv.style.borderColor = design.popupBorderColor;
-    this.mainDiv.style.width = this.design.popupInnerWidth + this.design.popupScrollBarWidth + 2 * this.design.popupBorderWidth + "px";
+    if (this.design.popupInnerWidth > 0) {
+        this.mainDiv.style.width = this.design.popupInnerWidth + this.design.popupScrollBarWidth + 2 * this.design.popupBorderWidth + "px";
+    } else if (this.design.popupInnerWidth <= 0) {
+        this.contentDiv.style.overflowX = "auto";
+    }
+    this.mainDiv.style.outline = "none";
     // the content div
-    // no padding at the right, leaving flexibility/space for scroll bar
-    this.contentDiv.style.paddingTop = design.popupPadding + "px";
-    this.contentDiv.style.paddingLeft = design.popupPadding + "px";
-    this.contentDiv.style.paddingBottom = design.popupPadding + "px";
+    this.contentDiv.style.padding = design.popupPadding + "px";
     // the control div
     if (design.popupHasControl) {
         this.controlDiv.style.padding = design.popupPadding + "px";
@@ -218,7 +235,7 @@ Popup.prototype.setStyle = function(newStyle) {
  * open the popup
  * @method Popup#open
  */
-Popup.prototype.open = function(content) {
+Popup.prototype.open = function() {
     if (this.mainDiv.style.display !== "block") {
         this.mainDiv.style.display = "block";
     }
@@ -246,7 +263,7 @@ Popup.prototype.isOpen = function() {
 /**
  * clear the popup (content)
  * (remove all children of the div)
- * @method Popup#close
+ * @method Popup#clear
  */
 Popup.prototype.clear = function() {
     while (this.contentDiv.firstChild) {

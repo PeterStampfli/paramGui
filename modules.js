@@ -80,11 +80,6 @@ export {
 from "./selectValues.js";
 
 export {
-    Range
-}
-from "./range.js";
-
-export {
     AngleScale
 }
 from "./angleScale.js";

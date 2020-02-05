@@ -5,6 +5,101 @@
 
 export const guiUtils = {};
 
+// functions that check parameters, for overloading methods
+
+/**
+ * test if a variable is defined, and not missing in the call, 
+ * a missing parameter is "undefined"
+ * @method guiUtils.isDefined
+ * @param {anything} p
+ * @return true if p is defined
+ */
+guiUtils.isDefined = function(p) {
+    return ((typeof p) !== "undefined") && (p !== null);
+};
+
+/**
+ * test if a variable is boolean
+ * @method guiUtils.isBoolean
+ * @param {anything} p
+ * @return true if p is boolean
+ */
+guiUtils.isBoolean = function(p) {
+    return ((typeof p) === "boolean");
+};
+
+/**
+ * test if a variable is a string
+ * @method guiUtils.isString
+ * @param {anything} p
+ * @return true if p is string
+ */
+guiUtils.isString = function(p) {
+    return ((typeof p) === "string");
+};
+
+/**
+ * test if a variable is a function
+ * @method guiUtils.isFunction
+ * @param {anything} p
+ * @return true if p is a function
+ */
+guiUtils.isFunction = function(p) {
+    return ((typeof p) === "function");
+};
+
+/**
+ * test if a variable is an integer
+ * excluding float, NaN and infinite numbers (because of Number.isInteger)
+ * @method guiUtils.isInteger
+ * @param {anything} p
+ * @return true if p is integer
+ */
+guiUtils.isInteger = function(p) {
+    return ((typeof p) === "number") && (Number.isInteger(p));
+};
+
+/**
+ * test if a variable is a floating point number
+ * excluding integer, NaN and infinite numbers
+ * @method guiUtils.isFloat
+ * @param {anything} p
+ * @return true if p is float
+ */
+guiUtils.isFloat = function(p) {
+    return ((typeof p) === "number") && (!Number.isNaN(p)) && (!Number.isInteger(p)) && (Number.isFinite(p));
+};
+
+/**
+ * test if a variable is a number (integer or float)
+ * excluding NaN and infinite numbers
+ * @method guiUtils.isNumber
+ * @param {anything} p
+ * @return true if p is a number
+ */
+guiUtils.isNumber = function(p) {
+    return ((typeof p) === "number") && (!Number.isNaN(p)) && (Number.isFinite(p));
+};
+
+/**
+ * test if a variable is an array
+ * @method guiUtils.isArray
+ * @param {anything} p
+ * @return true if p is an array
+ */
+guiUtils.isArray = function(p) {
+    return ((typeof p) === "object") && (Array.isArray(p));
+};
+
+/**
+ * test if a variable is an object, not an array and not null
+ * @method guiUtils.isNumber
+ * @param {anything} p
+ * @return true if p is an object
+ */
+guiUtils.isObject = function(p) {
+    return ((typeof p) === "object") && (!Array.isArray(p)) && (p !== null);
+};
 
 /**
  * check if a file name is a string and has a good image file extension or is a dataURL of an image
@@ -46,19 +141,173 @@ guiUtils.updateValues = function(toObject, fromObject) {
     }
 };
 
-/**
- * set the style of an element using an object with style.key and value pairs
- * @method guiUtils.style
- * @param {html element} element
- * @param {... object} styles - style object, can be repeated, key is style property
+//   styles, DOM elements
+//============================================================================
+
+// take a HTML element and style it
+
+var elements;
+
+/*
+ *  add element or array of elements to the list of elements for styling
  */
-guiUtils.style = function(element, styles) {
-    for (var i = 1; i < arguments.length; i++) {
-        const newStyle = arguments[i];
-        if (typeof newStyle === "object") {
-            for (var key in newStyle) {
-                element.style[key] = newStyle[key];
+function addElement(elmnt) {
+    if (Array.isArray(elmnt)) {
+        for (var j = 0; j < elmnt.length; j++) {
+            elements.push(elmnt[j]);
+        }
+    } else {
+        elements.push(elmnt);
+    }
+}
+
+/**
+ * register HTML elements for styling
+ * @method guiUtils.style
+ * @param {... HTLElement|array of  HTMLElements} elmnts
+ * @return guiUtils, for chaining
+ */
+guiUtils.style = function(elmnts) {
+    elements = [];
+    for (var i = 0; i < arguments.length; i++) {
+        addElement(arguments[i]);
+
+    }
+    return guiUtils;
+};
+
+/**
+ * set parent for registered HTML elements
+ * @method guiUtils.parent
+ * @param {HTLElement} p - parent element
+ * @return guiUtils, for chaining
+ */
+guiUtils.parent = function(p) {
+    elements.forEach(element => p.appendChild(element));
+    return guiUtils;
+};
+
+
+/**
+ * set attribute for registered HTML elements
+ * @method guiUtils.attribute
+ * @param {string} name
+ * @param {string} value
+ * @return guiUtils, for chaining
+ */
+guiUtils.attribute = function(name, value) {
+    elements.forEach(element => element.setAttribute(name, value));
+    return guiUtils;
+};
+
+function addStyle(key) {
+    guiUtils[key] = function(value, elmnt) {
+        if (arguments.length > 1) {
+            elements = [];
+            for (var i = 1; i < arguments.length; i++) {
+                addElement(arguments[i]);
             }
         }
+        elements.forEach(element => element.style[key] = value);
+        return guiUtils;
+    };
+}
+
+/*
+create methods for styling the registered elements
+@method addStyles
+@param {array of strings} keys 
+*/
+
+function addStyles(keys) {
+    keys.forEach(key => addStyle(key));
+}
+
+/**
+ * resulting methods from the styles object:
+ * setting the element.style.key property to value
+ * @method guiUtils.key
+ * @param {integer|string} value
+ * @param {...htmlelement|array of HTMLelements} elmnt - optional, element to use for this styling and the following
+ * @return guiUtils, for chaining
+ */
+
+addStyles([
+    "width", "height", "fontSize", "paddingBottom",
+    "position", "top", "bottom", "left", "right",
+    "backgroundColor", "color",
+    "display", "zIndex",
+    "border", "borderRadius", "borderStyle", "borderWidth", "borderColor",
+    "objectFit", "objectPosition",
+    "cursor",
+    "outline",
+    "verticalAlign", "textAlign"
+]);
+
+/**
+ * create a horizontal space
+ * @method guiUtils.hSpace
+ * @param {htmlElement} parent
+ * @param {integer} width - in px
+ * @return the span element that makes the space
+ */
+guiUtils.hSpace = function(parent, width) {
+    const space = document.createElement("span");
+    space.style.display = "inline-block";
+    space.style.width = width + "px";
+    parent.appendChild(space);
+    return space;
+};
+
+/**
+ * create a vertical space
+ * @method guiUtils.vSpace
+ * @param {htmlElement} parent
+ * @param {integer} height - in px
+ * @return the div element that makes the space
+ */
+guiUtils.vSpace = function(parent, height) {
+    const space = document.createElement("div");
+    space.style.height = height + "px";
+    parent.appendChild(space);
+    return space;
+};
+
+/**
+ * make that the element display style has given value
+ * @method guiUtils.setDisplayStyle
+ * @param {htmlElement} element
+ * @param {string} value
+ */
+guiUtils.setDisplayStyle = function(element, value) {
+    if ((element) && (element.style.display !== value)) {
+        element.style.display = value;
     }
+};
+
+/**
+ * make that the element display style is "none", ok for undefined
+ * @method guiUtils.setDisplayStyle
+ * @param {htmlElement} element
+ */
+guiUtils.displayNone = function(element) {
+    guiUtils.setDisplayStyle(element, "none");
+};
+
+/**
+ * make that the element display style is "block"
+ * @method guiUtils.setDisplayStyle
+ * @param {htmlElement} element
+ */
+guiUtils.displayBlock = function(element) {
+    guiUtils.setDisplayStyle(element, "block");
+};
+
+/**
+ * make that the element display style is "inline-block"
+ * @method guiUtils.setDisplayStyle
+ * @param {htmlElement} element
+ */
+guiUtils.displayInlineBlock = function(element) {
+    guiUtils.setDisplayStyle(element, "inline-block");
 };

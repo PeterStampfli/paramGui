@@ -12,30 +12,42 @@ import {
  *  (that should be safe because of different lengths of strings)
  * make a text input , color input and range
  * @creator ParamColor
- * @param {ParamGui} gui - the controller is in this gui
+ * @param {ParamGui} gui - the gui it is in
+ * @param {htmlElement} domElement - container for the controller, div or span
  * @param {Object} params - object that has the parameter as a field
  * @param {String} property - for the field of object to change, params[property]
  */
 
-export function ParamColor(gui, params, property) {
-    this.gui = gui;
+export function ParamColor(gui, domElement, params, property) {
+    const design = gui.design;
+    this.design = design;
+    this.domElement = domElement;
     this.params = params;
     this.property = property;
     this.listening = false; // automatically update display
-    this.initCreate();
-    const design = this.gui.design;
-    let color = this.params[this.property];
+    this.helpButton = null;
+    // the button or whatever the user interacts with
+    this.uiElement = null;
     this.createLabel(this.property);
+    let color = this.params[this.property];
     const hasAlpha = ColorInput.hasAlpha(color);
     const colorInput = new ColorInput(this.domElement, hasAlpha);
     colorInput.setWidths(design.colorTextWidth, design.colorColorWidth, design.colorRangeWidth);
     colorInput.setValue(color);
     // we need the root gui dom element to be able to see size of the text input element
-    colorInput.setFontSize(this.gui.getRoot().domElement, design.buttonFontSize); // attention: reading offsetHeight !
+    colorInput.setFontSize(design.buttonFontSize); // attention: reading offsetHeight !
     this.uiElement = colorInput;
     this.setupOnChange();
     this.setupOnInteraction();
-    this.gui.bodyDiv.appendChild(this.domElement);
+
+    /**
+     * callback for changes
+     * @method paramControllerMethods.callback
+     * @param {anything} value
+     */
+    this.callback = function(value) {
+        console.log("callback value " + value);
+    };
 }
 
 const px = "px";

@@ -42,7 +42,8 @@ import {
     ParamController,
     ParamImageSelection,
     Button,
-    InstantHelp
+    InstantHelp,
+    Logger
 } from "./modules.js";
 
 export function ParamGui(params) {
@@ -261,6 +262,11 @@ ParamGui.defaultDesign = {
     // width of range element
     colorRangeWidth: 70,
 
+    // style for the logger
+    loggerHeight: 100,
+    loggerBackgroundColor: "#ffffff",
+    loggerColor: "#000088",
+
     // style for the image selection/preset selection
     //-------------------------------------
     // the icon image
@@ -309,6 +315,44 @@ ParamGui.spaceWidth = 7;
  */
 ParamGui.updateDefaultDesign = function(newValues) {
     guiUtils.updateValues(ParamGui.defaultDesign, newValues);
+};
+
+ParamGui.outputDiv = false;
+
+/**
+ * create an output div fitting this gui
+ * it will be in ParamGui.outputDiv
+ * ASSUMING that this.autoPlace=true, 
+ *  this.design.horizontalPosition= "right",
+ *  this.design.horizontalShift= 0,
+ * @method ParamGui#createOutputDiv
+ */
+ParamGui.prototype.createOutputDiv = function() {
+    // check assumptions
+    if (ParamGui.outputDiv) {
+        console.log("*** ParamGui.outputDiv already exists");
+    } else if (this.autoPlace && (this.design.horizontalPosition === "right") && (this.design.horizontalShift === 0)) {
+        ParamGui.outputDiv = document.createElement("div");
+        guiUtils.style(ParamGui.outputDiv)
+            .position("absolute")
+            .top("0px")
+            .left("0px")
+            .overflow("auto");
+        // resize the output div such that it fills the screen at the left of the gui
+        const guiTotalWidth = this.design.width + 2 * this.design.borderWidth;
+        const resizeOutputDiv = function() {
+            ParamGui.outputDiv.style.height = document.documentElement.clientHeight + "px";
+            ParamGui.outputDiv.style.width = (document.documentElement.clientWidth - guiTotalWidth) + "px";
+        };
+        resizeOutputDiv();
+        window.addEventListener("resize", resizeOutputDiv, false);
+        document.body.appendChild(ParamGui.outputDiv);
+    } else {
+        console.log("*** problem in ParamGui#createOutputDiv:");
+        console.log("autoPlace " + this.autoPlace);
+        console.log("design.horizontalPosition " + this.design.horizontalPosition);
+        console.log("design.horizontalShift " + this.design.horizontalShift);
+    }
 };
 
 /**
@@ -382,11 +426,11 @@ ParamGui.updateZIndices = function() {
 
 /**
  * close all popups of all guis
- * @method ParamGui.closePopup
+ * @method ParamGui.closePopups
  */
-ParamGui.closePopup = function() {
+ParamGui.closePopups = function() {
     for (var i = 0; i < ParamGui.rootGuis.length; i++) {
-        ParamGui.rootGuis[i].closePopup();
+        ParamGui.rootGuis[i].closePopups();
     }
 };
 
@@ -713,6 +757,19 @@ ParamGui.prototype.remove = function(element) {
 ParamGui.prototype.removeFolder = ParamGui.prototype.remove;
 
 /**
+ * create a div for a controller
+ * @method ParamGui#createControllerDomElement
+ * @return a formatted div
+ */
+ParamGui.prototype.createControllerDomElement = function() {
+    const controllerDomElement = document.createElement("div");
+    // make a regular spacing between elements
+    controllerDomElement.style.paddingTop = this.design.paddingVertical + "px";
+    controllerDomElement.style.paddingBottom = this.design.paddingVertical + "px";
+    return controllerDomElement;
+};
+
+/**
  * make a controller with an image selection
  * choices as an object with (label: value pairs)
  * for choosing images:
@@ -762,8 +819,6 @@ ParamGui.prototype.addImageSelection = function(params, property, choices) {
 
 /**
  * adding a controller for a simple parameter
- * with visuals, in a common div
- * making a ui control element, same as in "lib/dat.gui.min2.js", one on a line
  * uses new image select with popup instead of simple select if:
  *     if design.preferNewImageselect is true and low is an object (that defines choices)
  *     and first low.value is a good image file
@@ -784,16 +839,88 @@ ParamGui.prototype.add = function(params, property, low, high, step) {
         // use the new image select
         return this.addImageSelection(params, property, low);
     } else {
-        const controllerDomElement = document.createElement("div");
-        // make a regular spacing between elements
-        controllerDomElement.style.paddingTop = this.design.paddingVertical + "px";
-        controllerDomElement.style.paddingBottom = this.design.paddingVertical + "px";
-        const controller = new ParamController(this, controllerDomElement, params, property, low, high, step);
+        const controllerDomElement = this.createControllerDomElement();
+        const controller = ParamController.create(this, controllerDomElement, params, property, low, high, step);
         // change dom after all work has been done
         this.bodyDiv.appendChild(controllerDomElement);
-        this.elements.push(controller);
         return controller;
     }
+};
+
+/**
+ * add a button controller with simple interface
+ * @method ParamGui#addButton
+ * @param {string} text - for the button
+ * @param {function} action - what the button does
+ * @return {controller} with the button
+ */
+ParamGui.prototype.addButton = function(text, action) {
+    const controllerDomElement = this.createControllerDomElement();
+    const controller = ParamController.createButton(this, controllerDomElement, text, action);
+    this.bodyDiv.appendChild(controllerDomElement);
+    return controller;
+};
+
+/**
+ * create a select ui, the options are an array or object
+ * @method ParamGui.addSelect
+ * @param {string} labelText
+ * @param {array||object} options - array with values for both name/value or an object={name1: value1, name2: value2, ...}
+ * @param {value} value
+ * @param {function} action - optional, does it upon onChange
+ */
+ParamGui.prototype.addSelect = function(labelText, options, value, action = false) {
+    const controllerDomElement = this.createControllerDomElement();
+    const controller = ParamController.createSelect(this, controllerDomElement, labelText, options, value, action);
+    this.bodyDiv.appendChild(controllerDomElement);
+    return controller;
+};
+
+/**
+ * add a boolean button
+ * @method ParamGui.addBooleanButton
+ * @param {string} labelText - for the label
+ * @param {boolean} value
+ * @param {function} action - optional, does it upon onChange
+ */
+ParamGui.prototype.addBooleanButton = function(labelText, value, action = false) {
+    const controllerDomElement = this.createControllerDomElement();
+    const controller = ParamController.createBooleanButton(this, controllerDomElement, labelText, value, action);
+    this.bodyDiv.appendChild(controllerDomElement);
+    return controller;
+};
+
+/**
+ * add an ui element to input text
+ * @method ParamGui.addTextInput
+ * @param {string} labelText - for the label
+ * @param {string} text
+ * @param {function} action - optional, does it upon onChange
+ */
+ParamGui.prototype.addTextInput = function(labelText, text, action = false) {
+    const controllerDomElement = this.createControllerDomElement();
+    const controller = ParamController.createTextInput(this, controllerDomElement, labelText, text, action);
+    this.bodyDiv.appendChild(controllerDomElement);
+    return controller;
+};
+
+
+/**
+ *  add ui element to input numbers, with action
+ * .addNumberButton("label",3.1,function action(){...}) is possible
+ * @method ParamGui.addNumberButton
+ * @param {string} labelText - for the label
+ * @param {number} value
+ * @param {number} low - optional
+ * @param {number} high - optional, requires low
+ * @param {number} step - optional, requires low and high
+ * @param {function} action - optional, does it upon onChange, independent of low, high and step
+ */
+ParamGui.prototype.addNumberButton = function(labelText, value, low, high, step, action = false) {
+    const controllerDomElement = this.createControllerDomElement();
+    const controller = ParamController.createNumberButton(this, controllerDomElement, labelText, value, low, high, step, action);
+    this.bodyDiv.appendChild(controllerDomElement);
+    return controller;
 };
 
 /**
@@ -815,16 +942,39 @@ ParamGui.prototype.addColor = function(params, property) {
 };
 
 /**
- * make a controller for an angle (and scale)
- * @method ParamGui#addAngle
- * @param {Object} params - object that has the parameter as a field
- * @param {String} property - key for the field of params to change, params[property]
- * @return {ParamController} object
+ * add a logger with an optional clear button
+ * (the clear button is in the controller object: logger.clearButton)
+ * @param {boolean} addClearButton, default: true
+ * @method ParamGui#addLogger
+ * @return {Logger} object
  */
-ParamGui.prototype.addAngle = function(params, property) {
-    const controller = new ParamAngle(this, params, property);
-    this.elements.push(controller);
-    return controller;
+ParamGui.prototype.addLogger = function(addClearButton = true) {
+    const domElement = document.createElement("div");
+    // make a regular spacing between elements
+    domElement.style.paddingTop = this.design.paddingVertical + "px";
+    domElement.style.paddingBottom = this.design.paddingVertical + "px";
+    domElement.style.paddingLeft = this.design.spaceWidth + "px";
+    domElement.style.paddingRight = this.design.paddingVertical + "px";
+    domElement.style.fontSize = this.design.labelFontSize + "px";
+    domElement.style.height = this.design.loggerHeight + "px";
+    domElement.style.backgroundColor = this.design.loggerBackgroundColor;
+    domElement.style.color = this.design.loggerColor;
+    domElement.style.overflowY = "auto";
+    domElement.style.borderWidth = this.design.borderWidth + "px";
+    domElement.style.borderBottomStyle = "solid";
+    domElement.style.borderColor = this.design.borderColor;
+    domElement.style.borderTopStyle = "solid";
+    const logger = new Logger(domElement);
+    this.bodyDiv.appendChild(domElement);
+    this.elements.push(logger);
+    if (addClearButton) {
+        logger.buttonController = this.addButton("clear the log", function() {
+            logger.clear();
+        });
+        logger.buttonController.domElement.style.textAlign = "center";
+        logger.buttonController.deleteLabel();
+    }
+    return logger;
 };
 
 /**
@@ -876,7 +1026,9 @@ ParamGui.prototype.addParagraph = function(innerHTML) {
  */
 ParamGui.prototype.updateDisplayIfListening = function() {
     this.elements.forEach(function(element) {
-        element.updateDisplayIfListening();
+        if (element.updateDisplayIfListening) {
+            element.updateDisplayIfListening();
+        }
     });
 };
 
@@ -955,8 +1107,12 @@ ParamGui.prototype.destroy = function() {
 
 /**
  * close popups
- * @method ParamGui#closePopup
+ * @method ParamGui#closePopups
  */
-ParamGui.prototype.closePopup = function() {
-    this.elements.forEach(element => element.closePopup());
+ParamGui.prototype.closePopups = function() {
+    this.elements.forEach(element => {
+        if (typeof element.closePopup === "function") {
+            element.closePopup();
+        }
+    });
 };

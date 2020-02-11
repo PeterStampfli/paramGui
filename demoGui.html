@@ -9,7 +9,6 @@
 
 <body>
 
-<canvas id="sq">test</canvas>
 
 </body>
 
@@ -20,17 +19,14 @@ import {
 }
 from "./modules.js";
 
-const square = document.getElementById("sq");
-
-square.style.width = "300px";
-square.style.height = "300px";
-square.style.backgroundColor = "red";
 
 const gui = new ParamGui({}, {
     name: "demo controls",
     closed: false,
     closeOnTop: true
 });
+
+gui.createOutputDiv();     //  -> ParamGui.outputDiv
 
 gui.addHelp("This is a <strong>demo</strong>.");
 
@@ -42,19 +38,36 @@ gui.addParagraph("The $-keyboard key hides/shows the gui. The tab-key cycles thr
 gui.addParagraph("With gui.addVerticalSpace(...) we can add a spacing:");
 gui.addVerticalSpace(8, "blue");
 
+gui.addParagraph("You can log messages, in different loggers like this one:")
+
+const logger=gui.addLogger();
+logger.log("a first message.");
+logger.log("a second message.");
+logger.log("more messages ....");
+logger.log("more messages ....");
+logger.log("more messages ....");
+logger.log("more messages ....");
+logger.log("more messages ....");
+logger.log("more messages ....");
+logger.log("and more messages ....");
+logger.log("and more messages ....");
+logger.log("and more messages ....");
+
 gui.addParagraph("The ui for numbers is basically only a text input field interacting with the mouse, mouse wheel, keyboard (arrows too)");
 
 params.number = 3.4;
-gui.add(params, "number", 0, 8); // no stepsize is given, it comes from the initial value
+const nc=gui.add(params, "number", 0, 8); // no stepsize is given, it comes from the initial value
+nc.hide();
+nc.show();
 
-gui.addParagraph("You can add an indicator in the background.");
+gui.addParagraph("You can add an indicator in the background. Min and max values required.");
 params.indi = 1;
 gui.add(params, "indi", 0, 10, 0.01).createIndicatorMain();
 
 gui.changeDesign({
     popupForNumberController: false
 });
-gui.addParagraph("Add buttons if useful:");
+gui.addParagraph("Add buttons if usefull:");
 params.plusMin = 2;
 gui.add(params, "plusMin", -2, 12).createPlusMinusButtons().createIndicatorMain().createMaxMinButtons();
 
@@ -101,15 +114,16 @@ gui.add(params, "image", choices);
 gui.addParagraph("Images with transparency are shown on a <strong>dark</strong> background if they have a light color.");
 
 
-gui.addParagraph("This color controller has an alpha channel. It controls the color and transparency of the square at the left:");
+gui.addParagraph("This color controller has an alpha channel. It controls the color and transparency at the left:");
 
 params.square = "#ff0000ff";
 const co = gui.addColor(params, "square");
 co.addHelp("Changes the color of the square at the left");
 co.onChange(function(value) {
     console.log(value);
-    square.style.backgroundColor = value;
+    ParamGui.outputDiv.style.backgroundColor = value;
 });
+co.setValue("#ff9900")
 
 gui.addParagraph("If the color parameter at initialization of the gui has no alpha value, then the controller too has no alpha and no range element:");
 params.rgb = "#44ff00";

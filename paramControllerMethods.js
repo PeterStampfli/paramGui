@@ -5,14 +5,10 @@
  */
 
 import {
-    SelectValues,
-    BooleanButton,
-    NumberButton,
-    TextInput,
     Button,
     InstantHelp,
-    ColorInput,
-    ParamGui
+    ParamGui,
+    guiUtils
 } from "./modules.js";
 
 export const paramControllerMethods = {};
@@ -59,23 +55,34 @@ paramControllerMethods.addHelp = function(message) {
 };
 
 /**
+ * test if the controller has a params object and a property
+ * test if the corresponding field exists
+ * in case, change the value
+ * @method ParamController.setParamsProperty
+ * @param {whatever} value
+ */
+paramControllerMethods.setParamsProperty = function(value) {
+    if (this.params && this.property && guiUtils.isDefined(this.params[this.property])) {
+        this.params[this.property] = value;
+    }
+};
+
+/**
  * connect the ui controller with the param object:
  * sets the onChange function of the ui element
- * onChange sets the param[property] value
+ * onChange sets the param[property] value if param and property are defined
  * (synchronizes ui display and data object)
- * and calls the callback ONLY if the parameter value changes
- * basic functionality, use other element.onChange for complicated controllers
+ * basic functionality, redefine element.onChange for complicated controllers
  * @method paramControllerMethods.setupOnChange
  */
 paramControllerMethods.setupOnChange = function() {
     const element = this.uiElement;
     const controller = this;
+    // element.onChange gets called only if the value changes
     element.onChange = function() {
         const value = element.getValue();
-        if (controller.params[controller.property] !== value) {
-            controller.params[controller.property] = value;
-            controller.callback(value);
-        }
+        controller.setParamsProperty(value);
+        controller.callback(value);
     };
 };
 
@@ -86,7 +93,7 @@ paramControllerMethods.setupOnChange = function() {
  */
 paramControllerMethods.setupOnInteraction = function() {
     this.uiElement.onInteraction = function() {
-        ParamGui.closePopup();
+        ParamGui.closePopups();
     };
 };
 
@@ -126,15 +133,14 @@ paramControllerMethods.onFinishChange = function(callback) {
     return this;
 };
 
-// setting and getting values:
-// Be careful. Two different values, of the ui and the object.
+// setting and getting values. Be careful if a params object exists:
+// Two different values, of the ui and the object.
 // they have to be synchronized
 // different values: use the ui value, change the object value
 // if the value of the param object changes, then update the object via callback
 
 /**
- * set the value of the param object
- * updates display (and last value field)
+ * updates display and set the value of the param object if it exists
  * DOES NOT call the callback()
  * (good for multiple parameter changes, use callback only at last change
  * (Note that this.setValue() is not the same as this.uiElement.setValue())
@@ -143,20 +149,20 @@ paramControllerMethods.onFinishChange = function(callback) {
  * @param {whatever} value
  */
 paramControllerMethods.setValueOnly = function(value) {
-    this.params[this.property] = value;
-    this.updateDisplay();
+    this.setParamsProperty(value);
+    this.uiElement.setValue(value);
 };
 
 /**
- * set the value of the controller and last value field
- * set the value of the param object and call the callback to enforce synchronization
+ * set the value of the controller
+ * set the value of the param object (if exists) and call the callback to enforce synchronization
  * (Note that this.setValue() is not the same as this.uiElement.setValue())
- * Can we assume that the param object is synchronized with its data? Is this probable? Can we save work?
  * @method paramControllerMethods.setValue
  * @param {whatever} value
  */
 paramControllerMethods.setValue = function(value) {
-    this.setValueOnly(value);
+    this.setParamsProperty(value);
+    this.uiElement.setValue(value);
     this.callback(value);
 };
 
@@ -173,13 +179,14 @@ paramControllerMethods.getValue = function() {
 
 /**
  * set the value of the display (controller) according to the actual value of the parameter in the params object
- * do not update the param object
- * updates display automatically
+ * if params exist, else do nothing
  * @method paramControllerMethods.updateDisplay
  */
 paramControllerMethods.updateDisplay = function() {
-    const value = this.params[this.property];
-    this.uiElement.setValue(value);
+    if (this.params && this.property && guiUtils.isDefined(this.params[this.property])) {
+        const value = this.params[this.property];
+        this.uiElement.setValue(value);
+    }
 };
 
 /**
@@ -194,7 +201,7 @@ paramControllerMethods.updateDisplayIfListening = function() {
 };
 
 /**
- * not implemented: periodically call updateDisplay to show changes automatically
+ * periodically call updateDisplay to show changes automatically
  * because of dat.gui api
  * @method paramControllerMethods.listen
  * @return this, for chaining
@@ -207,7 +214,7 @@ paramControllerMethods.listen = function() {
 
 /**
  * changes the label text, instead of the property string, to show something more interesting
- * for buttons changes the button text
+ * for buttons: changes the button text
  * does nothing if there is no label
  * same as datGui
  * @method paramControllerMethods.name
@@ -239,7 +246,7 @@ paramControllerMethods.setButtonText = function(label) {
 
 /**
  * changes the label text, instead of property name, to show something more interesting
- * for buttons changes label too (starts as empty string)
+ * for buttons: changes label (starts as empty string)
  * @method paramControllerMethods.setLabel
  * @param {String} label
  * @return this, for chaining
@@ -262,6 +269,18 @@ paramControllerMethods.deleteLabel = function() {
         this.label = false;
     }
     return this;
+};
+
+
+/**
+ * register parent domElement in guiUtils for styling
+ * see docu of guiUtils.style
+ * use: controller.style().backgroundColor("red")
+ * @method paramControllerMethods.style
+ * @return guiUtils
+ */
+paramControllerMethods.style = function() {
+    return guiUtils.style(this.parent);
 };
 
 /**
@@ -289,6 +308,17 @@ paramControllerMethods.setMinElementWidth = function(width) {
 };
 
 /**
+ * make that numberbuttons and range elements become cyclic
+ * default: other buttons without effect
+ * @method ParamControllerMethods.cyclic
+ * @return this for chaining
+ */
+// here a do nothing stub for non-number controllers
+paramControllerMethods.cyclic = function() {
+    return this;
+};
+
+/**
  * make the controller disappear including its space (display==none)
  * @method paramControllerMethods.hide
  * @return this
@@ -307,11 +337,3 @@ paramControllerMethods.show = function() {
     this.domElement.style.display = "block";
     return this;
 };
-
-/**
- * for controllers with popup: close the popup
- * most controllers don't have a popup, thus this method stub does nothing
- * overwrite for controllers with a popup
- * @method paramControllerMethods.closePopup
- */
-paramControllerMethods.closePopup = function() {};

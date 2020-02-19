@@ -37,10 +37,7 @@ The increment of value for each scroll changes the digit where the caret is.
 
 import {
     guiUtils,
-    ParamColor,
-    ParamAngle,
     ParamController,
-    ParamImageSelection,
     Button,
     InstantHelp,
     Logger
@@ -112,6 +109,13 @@ export function ParamGui(params) {
         // autoPlacing the root gui domElement relative to one of the four corners
         // and make the bodyDiv scrolling vertical, if needed
         this.domElement.appendChild(this.bodyDiv);
+
+        const gui = this;
+        this.domElement.onclick = function() {
+            ParamGui.moveToFront(gui);
+            ParamGui.closePopups(gui);
+        };
+
         if (this.autoPlace) {
             this.domElement.style.position = "fixed";
             this.domElement.style[design.verticalPosition] = design.verticalShift + "px";
@@ -122,7 +126,7 @@ export function ParamGui(params) {
             this.bodyDiv.style.overflowY = "auto";
             this.bodyDiv.style.overflowX = "hidden";
             document.body.appendChild(this.domElement);
-            this.resize();
+            this.resize(); // can only resize after attaching element to the document body
         } else {
             document.body.appendChild(this.domElement);
         }
@@ -169,14 +173,13 @@ ParamGui.prototype.changeDesign = function(design) {
 ParamGui.defaultDesign = {
     // controller for numbers
     //==========================================
-    popupForNumberController: true,
+    usePopup: true,
     popupMinWidth: 0,
     indicatorColorLeft: "#dddddd",
     indicatorColorRight: "#f8f8f8",
 
     // image select, loading user images
     //===============================================
-    preferNewImageselect: true,
     acceptUserImages: true,
     addImageButtonText: "add images",
     dropToPopupText: "Drop images here!",
@@ -197,7 +200,7 @@ ParamGui.defaultDesign = {
     // vertical spacing
     paddingVertical: 4,
     // indentation witdh per folder level
-    levelIndent: 10,
+    levelIndent: 7,
     // width of border around ui panel
     borderWidth: 3, // set to zero to make border disappear
     // color for the border of the ui panel
@@ -237,6 +240,8 @@ ParamGui.defaultDesign = {
     labelWidth: 80,
     // fontsize for labels
     labelFontSize: 14,
+    // text alignment in the label (of minimum width)
+    labelTextAlign: "left",
 
     // style for simple controllers (defined in paramController.js)
     //--------------------------------------
@@ -263,7 +268,7 @@ ParamGui.defaultDesign = {
     colorRangeWidth: 70,
 
     // style for the logger
-    loggerHeight: 100,
+    loggerHeight: 200,
     loggerBackgroundColor: "#ffffff",
     loggerColor: "#000088",
 
@@ -317,44 +322,6 @@ ParamGui.updateDefaultDesign = function(newValues) {
     guiUtils.updateValues(ParamGui.defaultDesign, newValues);
 };
 
-ParamGui.outputDiv = false;
-
-/**
- * create an output div fitting this gui
- * it will be in ParamGui.outputDiv
- * ASSUMING that this.autoPlace=true, 
- *  this.design.horizontalPosition= "right",
- *  this.design.horizontalShift= 0,
- * @method ParamGui#createOutputDiv
- */
-ParamGui.prototype.createOutputDiv = function() {
-    // check assumptions
-    if (ParamGui.outputDiv) {
-        console.log("*** ParamGui.outputDiv already exists");
-    } else if (this.autoPlace && (this.design.horizontalPosition === "right") && (this.design.horizontalShift === 0)) {
-        ParamGui.outputDiv = document.createElement("div");
-        guiUtils.style(ParamGui.outputDiv)
-            .position("absolute")
-            .top("0px")
-            .left("0px")
-            .overflow("auto");
-        // resize the output div such that it fills the screen at the left of the gui
-        const guiTotalWidth = this.design.width + 2 * this.design.borderWidth;
-        const resizeOutputDiv = function() {
-            ParamGui.outputDiv.style.height = document.documentElement.clientHeight + "px";
-            ParamGui.outputDiv.style.width = (document.documentElement.clientWidth - guiTotalWidth) + "px";
-        };
-        resizeOutputDiv();
-        window.addEventListener("resize", resizeOutputDiv, false);
-        document.body.appendChild(ParamGui.outputDiv);
-    } else {
-        console.log("*** problem in ParamGui#createOutputDiv:");
-        console.log("autoPlace " + this.autoPlace);
-        console.log("design.horizontalPosition " + this.design.horizontalPosition);
-        console.log("design.horizontalShift " + this.design.horizontalShift);
-    }
-};
-
 /**
  * add a span with a space to the parent element
  * use ParamGui.spaceWidth as parameter !!!
@@ -403,7 +370,7 @@ ParamGui.removeArrayElement = function(array, element) {
 ParamGui.rootGuis = [];
 
 /**
- * test if a GUI is last element of list of root guis
+ * test if a root GUI is last element of list of root guis
  * and thus in front
  * @method ParamGui.isInFront
  * @param {ParamGui} rootGui 
@@ -421,16 +388,6 @@ ParamGui.isInFront = function(rootGui) {
 ParamGui.updateZIndices = function() {
     for (var i = 0; i < ParamGui.rootGuis.length; i++) {
         ParamGui.rootGuis[i].setZIndex(ParamGui.zIndex + i);
-    }
-};
-
-/**
- * close all popups of all guis
- * @method ParamGui.closePopups
- */
-ParamGui.closePopups = function() {
-    for (var i = 0; i < ParamGui.rootGuis.length; i++) {
-        ParamGui.rootGuis[i].closePopups();
     }
 };
 
@@ -456,13 +413,29 @@ ParamGui.removeRootGui = function(rootGui) {
 };
 
 /**
- * put a rootgui in front, becomes last in list, covers all
+ * put a rootgui in front (if not already there), becomes last in list, appears in front
  * @method ParamGui.moveToFront
- * @param {Gui} rootGui
+ * @param {Gui} gui
  */
-ParamGui.moveToFront = function(rootGui) {
-    ParamGui.removeRootGui(rootGui);
-    ParamGui.addRootGui(rootGui);
+ParamGui.moveToFront = function(gui) {
+    const rootGui = gui.getRoot();
+    if (!ParamGui.isInFront(rootGui)) {
+        ParamGui.removeRootGui(rootGui);
+        ParamGui.addRootGui(rootGui);
+    }
+};
+
+/**
+ * close all popups of all guis, with optional exception
+ * @method ParamGui.closePopups
+ * @param {ParamGui} exception
+ */
+ParamGui.closePopups = function(exception = null) {
+    for (var i = 0; i < ParamGui.rootGuis.length; i++) {
+        if (ParamGui.rootGuis[i] !== exception) {
+            ParamGui.rootGuis[i].closePopup();
+        }
+    }
 };
 
 /**
@@ -480,6 +453,15 @@ ParamGui.startListening = function() {
             });
         }, ParamGui.listeningInterval);
     }
+};
+
+
+/**
+ * display update for all controllers with a params object and a property parameter
+ * @method ParamGui.updateDisplay
+ */
+ParamGui.updateDisplay = function() {
+    ParamGui.rootGuis.forEach(gui => gui.updateDisplay());
 };
 
 // keyboard ParamGui.hideCharacter hide/shows all hideable guis
@@ -601,12 +583,12 @@ ParamGui.prototype.resize = function() {
 };
 
 /**
- * set the z-index of the domElement, that contains all
+ * set the z-index of the domElement, that contains all other elements
  * @method ParamGui#setZIndex
  * @param {integer} zIndex
  */
 ParamGui.prototype.setZIndex = function(zIndex) {
-    this.domElement.zIndex = zIndex + "";
+    this.domElement.style.zIndex = zIndex;
 };
 
 // hide and show might be used in a program to hide irrelevant parameters
@@ -630,6 +612,7 @@ ParamGui.prototype.hide = function() {
         // hide body div and the bottom padding div
         this.bodyDiv.style.display = "none";
     }
+    this.closePopup();
 };
 
 /**
@@ -686,6 +669,7 @@ ParamGui.prototype.close = function() {
             paramGui.open();
         };
         this.bodyDiv.style.display = "none";
+        this.closePopup();
     }
 };
 
@@ -756,225 +740,176 @@ ParamGui.prototype.remove = function(element) {
  */
 ParamGui.prototype.removeFolder = ParamGui.prototype.remove;
 
-/**
- * create a div for a controller
- * @method ParamGui#createControllerDomElement
- * @return a formatted div
+/*
+ * define the kind of controller
  */
-ParamGui.prototype.createControllerDomElement = function() {
-    const controllerDomElement = document.createElement("div");
-    // make a regular spacing between elements
-    controllerDomElement.style.paddingTop = this.design.paddingVertical + "px";
-    controllerDomElement.style.paddingBottom = this.design.paddingVertical + "px";
-    return controllerDomElement;
+export const NUMBER = "number";
+export const TEXT = "text";
+export const BUTTON = "button";
+export const SELECTION = "selection";
+export const BOOLEAN = "boolean";
+export const IMAGE = "image";
+export const COLOR = "color";
+export const ERROR = "error";
+
+/** 
+ * transform from datGui style arguments to the new args object
+ * @method ParamGui.createArgs
+ * @param {Object} theParams - object that has the parameter as a field, or an object with all information for the controller
+ * @param {String} theProperty - key for the field of params to change, params[property]
+ * @param {float/integer/array} low - determines lower limit/choices (optional)
+ * @param {float/integer} high - determines upper limit (optional)
+ * @param {float/integer} step - determines step size (optional)
+ * @return object args, for the new style
+ */
+
+ParamGui.createArgs = function(theParams, theProperty, low, high, step) {
+    console.log("generating an args object from old-style parameters");
+    if (!guiUtils.isObject(theParams)) {
+        console.log("**** There is a problem with the parameter object: " + theParams);
+    }
+    if (!guiUtils.isString(theProperty)) {
+        console.log("**** There is a problem with the property string: " + theProperty);
+    }
+    const args = {
+        params: theParams,
+        property: theProperty
+    };
+    const paramValue = theParams[theProperty];
+    // determine type of controller from paramValue and low
+    // add other fields to args depending on the type
+    if (guiUtils.isObject(low) &&
+        guiUtils.isGoodImageFile(low[Object.keys(low)[0]])) {
+        // if design option is true and low is an object (that defines choices)
+        // and first low.value is a good image file:  we use the new image selection
+        args.type = IMAGE;
+        args.options = low;
+    } else if (guiUtils.isArray(low) || guiUtils.isObject(low)) {
+        // low, the first parameter for limits is an array or object, thus make a selection
+        // we have to test this first as the paramValue might be anything    
+        args.type = SELECTION;
+        args.options = low;
+    } else if (guiUtils.isBoolean(paramValue)) {
+        // the parameter value is boolean, thus make a BooleanButton
+        args.type = BOOLEAN;
+    } else if (!guiUtils.isDefined(paramValue) || guiUtils.isFunction(paramValue)) {
+        // there is no parameter value with the property or it is a function
+        // thus make a button with the property as text, no label
+        args.type = BUTTON;
+        if (guiUtils.isFunction(paramValue)) {
+            args.onClick = paramValue;
+        }
+    } else if (guiUtils.isString(paramValue)) {
+        // the parameter value is a string thus make a text input button
+        args.type = TEXT;
+    } else if (guiUtils.isNumber(paramValue)) {
+        args.type = NUMBER;
+        if (guiUtils.isNumber(low)) {
+            args.min = low;
+        }
+        if (guiUtils.isNumber(high)) {
+            args.max = high;
+        }
+        if (guiUtils.isNumber(step)) {
+            args.stepSize = step;
+        }
+    } else {
+        // no idea/error
+        args.type = ERROR;
+        console.log("no fitting controller type found:");
+        console.log("property " + theProperty + " with value " + paramValue);
+        console.log("low " + low + ", high " + high + ", step " + step);
+    }
+    console.log(args);
+    return args;
 };
 
-/**
- * make a controller with an image selection
- * choices as an object with (label: value pairs)
- * for choosing images:
- * set labels and image urls as two strings, key value pairs of an object choices={ "label1": "URL1", ...},
- * for other uses (presets): image is only a label 
- * then use an object made of labels (again as keys) and value objects with image and value fields
- * this value field is actually choosen (the preset object), thus
- * choices={"label1": {"image": "URL1", value: someData}, ...}
- * @method ParamGui#addImageSelection
- * @param {Object} params - object that has the parameter as a field
- * @param {String} property - key for the field of params to change, params[property]
- * @param {object} choices - see above
- * @return {ParamController} object
- */
-ParamGui.prototype.addImageSelection = function(params, property, choices) {
-    const controllerDomElement = document.createElement("div");
-    // make a regular spacing between elements
-    controllerDomElement.style.paddingTop = this.design.paddingVertical + "px";
-    controllerDomElement.style.paddingBottom = this.design.paddingVertical + "px";
-    const controller = new ParamImageSelection(this, controllerDomElement, params, property, choices);
-    this.bodyDiv.appendChild(controllerDomElement);
-    this.elements.push(controller);
-    return controller;
-};
 
 /**
  * add a controller for a parameter, one controller on a line, in its div
  * depending on its value and limits
+ * parameters as in datGui.js for compatibility
+ * or a single argument objects that has all information and gives more flexibility
  * @method ParamGui#add
- * @param {Object} params - object that has the parameter as a field
- * @param {String} property - key for the field of params to change, params[property]
+ * @param {Object} theParams - object that has the parameter as a field, or an object with all information for the controller
+ * @param {String} theProperty - key for the field of params to change, params[property]
  * @param {float/integer/array} low - determines lower limit/choices (optional)
  * @param {float/integer} high - determines upper limit (optional)
  * @param {float/integer} step - determines step size (optional)
  * @return {ParamController} object, the controller
  */
-/*
+
+/* Old datGui style parameters (backwards compatible with datGui.js)
+ *-------------------------------------------------------------------
  * if low is an object or array then make a selection or a new image select
- * if params[property] is undefined make a button (action defined by onClick method of the controller object
- * if params[property] is boolean make a booleanButton
- * if params[property] is a string make a text textInput  
- * if params[property] is a function make a button with this function as onClick method 
- * if params[property] is a number make a number button with lower and upper limits if defined, 
+ * if theParams[theProperty] is undefined make a button (action defined by onClick method of the controller object
+ * if theParams[theProperty] is boolean make a booleanButton
+ * if theParams[theProperty] is a string make a text textInput  
+ * if theParams[theProperty] is a function make a button with this function as onClick method 
+ * if theParams[theProperty] is a number make a number button with lower and upper limits if defined, 
  *                                 if step is not defined, then a step size is deduced from the parameter value
  *                                 function buttons and range can be added to the domElement or the popup (if exists)
  */
 
-/**
- * adding a controller for a simple parameter
- * uses new image select with popup instead of simple select if:
- *     if design.preferNewImageselect is true and low is an object (that defines choices)
- *     and first low.value is a good image file
- * @method ParamGui#add
- * @param {Object} params - object that has the parameter as a field
- * @param {String} property - for the field of object to change, params[property]
- * @param {float/integer/array} low - determines lower limit/choices (optional)
- * @param {float/integer} high - determines upper limit (optional)
- * @param {float/integer} step - determines step size (optional)
+/* new arguments object
+ *------------------------------------------------------------
+ * args.type - values are NUMBER, BUTTON, BOOLEAN, SELECTION, COLOR or IMAGE (mandatory), defines type of controller
+ * args.params - an object, the controller controls its args.property field (optional)
+ * args.property - string, identifier of the parameter (mandatory if there is a args.params object)
+ * args.initialValue - initial value for the parameter (optional, else args.params[args.property] or 0)
+ * args.listening - boolean, (default false), if true, then the ui updates its value to the current value of args.params[args.property] 
+ * args.usePopup - boolean, determines if a number controller uses popup for additional button, (optional, default is gui.design.usePopup)
+ * args.labelText -string, for the label in the ui, (optional else args.property is used, except for type BUTTON)
+ * args.buttonText - string, for the text of the button of BUTTON controllers (optional, else args.property is used)
+ * args.onChange - callback function for changes or clicks (type BUTTON), (optional, for BUTTON args.params[args.property] is default)
+ * args.onClick - same as args.onChange
+ * args.minLabelWidth - number, minimum width for label (optional, default is gui.design.minLabelWidth)
+ * args.minElementWidth - number, minimum width for the ui element (optional, else it will fit its contents)
+ * args.options - array or object, only for SELECTION or IMAGE type controllers
+ * args.min - minimum value for NUMBER controllers (optional, default is 0)
+ * args.max - maximum value for NUMBER controllers (optional, default is a large number)
+ * args.stepSize - value for step of NUMBER controllers (optional, default is obtained from the initial value)
  */
-ParamGui.prototype.add = function(params, property, low, high, step) {
-    // see if we use the new image select:
-    // if design option is true and low is an object (that defines choices)
-    // and first low.value is a good image file
-    let useNewSelect = (this.design.preferNewImageselect) && (guiUtils.isObject(low));
-    useNewSelect = useNewSelect && (guiUtils.isGoodImageFile(low[Object.keys(low)[0]])); //first property of low is an image file
-    if (useNewSelect) {
-        // use the new image select
-        return this.addImageSelection(params, property, low);
+
+ParamGui.prototype.add = function(theParams, theProperty, low, high, step) {
+    var args;
+    if (arguments.length === 1) {
+        args = theParams; // the new version
     } else {
-        const controllerDomElement = this.createControllerDomElement();
-        const controller = ParamController.create(this, controllerDomElement, params, property, low, high, step);
-        // change dom after all work has been done
-        this.bodyDiv.appendChild(controllerDomElement);
-        return controller;
+        args = ParamGui.createArgs(theParams, theProperty, low, high, step);
     }
-};
-
-/**
- * add a button controller with simple interface
- * @method ParamGui#addButton
- * @param {string} text - for the button
- * @param {function} action - what the button does
- * @return {controller} with the button
- */
-ParamGui.prototype.addButton = function(text, action) {
-    const controllerDomElement = this.createControllerDomElement();
-    const controller = ParamController.createButton(this, controllerDomElement, text, action);
-    this.bodyDiv.appendChild(controllerDomElement);
-    return controller;
-};
-
-/**
- * create a select ui, the options are an array or object
- * @method ParamGui.addSelect
- * @param {string} labelText
- * @param {array||object} options - array with values for both name/value or an object={name1: value1, name2: value2, ...}
- * @param {value} value
- * @param {function} action - optional, does it upon onChange
- */
-ParamGui.prototype.addSelect = function(labelText, options, value, action = false) {
-    const controllerDomElement = this.createControllerDomElement();
-    const controller = ParamController.createSelect(this, controllerDomElement, labelText, options, value, action);
-    this.bodyDiv.appendChild(controllerDomElement);
-    return controller;
-};
-
-/**
- * add a boolean button
- * @method ParamGui.addBooleanButton
- * @param {string} labelText - for the label
- * @param {boolean} value
- * @param {function} action - optional, does it upon onChange
- */
-ParamGui.prototype.addBooleanButton = function(labelText, value, action = false) {
-    const controllerDomElement = this.createControllerDomElement();
-    const controller = ParamController.createBooleanButton(this, controllerDomElement, labelText, value, action);
-    this.bodyDiv.appendChild(controllerDomElement);
-    return controller;
-};
-
-/**
- * add an ui element to input text
- * @method ParamGui.addTextInput
- * @param {string} labelText - for the label
- * @param {string} text
- * @param {function} action - optional, does it upon onChange
- */
-ParamGui.prototype.addTextInput = function(labelText, text, action = false) {
-    const controllerDomElement = this.createControllerDomElement();
-    const controller = ParamController.createTextInput(this, controllerDomElement, labelText, text, action);
-    this.bodyDiv.appendChild(controllerDomElement);
-    return controller;
-};
-
-
-/**
- *  add ui element to input numbers, with action
- * .addNumberButton("label",3.1,function action(){...}) is possible
- * @method ParamGui.addNumberButton
- * @param {string} labelText - for the label
- * @param {number} value
- * @param {number} low - optional
- * @param {number} high - optional, requires low
- * @param {number} step - optional, requires low and high
- * @param {function} action - optional, does it upon onChange, independent of low, high and step
- */
-ParamGui.prototype.addNumberButton = function(labelText, value, low, high, step, action = false) {
-    const controllerDomElement = this.createControllerDomElement();
-    const controller = ParamController.createNumberButton(this, controllerDomElement, labelText, value, low, high, step, action);
-    this.bodyDiv.appendChild(controllerDomElement);
-    return controller;
-};
-
-/**
- * make a controller for color
- * @method ParamGui#addColor
- * @param {Object} params - object that has the parameter as a field
- * @param {String} property - key for the field of params to change, params[property]
- * @return {ParamController} object
- */
-ParamGui.prototype.addColor = function(params, property) {
     const controllerDomElement = document.createElement("div");
     // make a regular spacing between elements
     controllerDomElement.style.paddingTop = this.design.paddingVertical + "px";
     controllerDomElement.style.paddingBottom = this.design.paddingVertical + "px";
-    const controller = new ParamColor(this, controllerDomElement, params, property);
+    const controller = new ParamController(this, controllerDomElement, args);
+    // change dom after all work has been done
     this.bodyDiv.appendChild(controllerDomElement);
-    this.elements.push(controller);
     return controller;
 };
 
 /**
- * add a logger with an optional clear button
- * (the clear button is in the controller object: logger.clearButton)
- * @param {boolean} addClearButton, default: true
- * @method ParamGui#addLogger
- * @return {Logger} object
+ * make a controller for color, datGui.js style parameters
+ * @method ParamGui#addColor
+ * @param {Object} theParams - object that has the parameter as a field, or args object that has all data
+ * @param {String} theProperty - key for the field of params to change, theParams[theProperty]
+ * @return {ParamController} object
  */
-ParamGui.prototype.addLogger = function(addClearButton = true) {
-    const domElement = document.createElement("div");
-    // make a regular spacing between elements
-    domElement.style.paddingTop = this.design.paddingVertical + "px";
-    domElement.style.paddingBottom = this.design.paddingVertical + "px";
-    domElement.style.paddingLeft = this.design.spaceWidth + "px";
-    domElement.style.paddingRight = this.design.paddingVertical + "px";
-    domElement.style.fontSize = this.design.labelFontSize + "px";
-    domElement.style.height = this.design.loggerHeight + "px";
-    domElement.style.backgroundColor = this.design.loggerBackgroundColor;
-    domElement.style.color = this.design.loggerColor;
-    domElement.style.overflowY = "auto";
-    domElement.style.borderWidth = this.design.borderWidth + "px";
-    domElement.style.borderBottomStyle = "solid";
-    domElement.style.borderColor = this.design.borderColor;
-    domElement.style.borderTopStyle = "solid";
-    const logger = new Logger(domElement);
-    this.bodyDiv.appendChild(domElement);
-    this.elements.push(logger);
-    if (addClearButton) {
-        logger.buttonController = this.addButton("clear the log", function() {
-            logger.clear();
-        });
-        logger.buttonController.domElement.style.textAlign = "center";
-        logger.buttonController.deleteLabel();
+ParamGui.prototype.addColor = function(theParams, theProperty) {
+    var args;
+    if (arguments.length === 1) {
+        args = theParams; // the new version
+    } else {
+        console.log("generating an args object from old-style parameters");
+        args = {
+            params: theParams,
+            property: theProperty,
+            type: COLOR
+        };
+        args.type = COLOR;
+        console.log(args);
     }
-    return logger;
+    return this.add(args);
 };
 
 /**
@@ -1030,6 +965,14 @@ ParamGui.prototype.updateDisplayIfListening = function() {
             element.updateDisplayIfListening();
         }
     });
+};
+
+/**
+ * propagate updateDisplay events 
+ * @method ParamGui#updateDisplay
+ */
+ParamGui.prototype.updateDisplay = function() {
+    this.elements.forEach(element => element.updateDisplay());
 };
 
 /**
@@ -1107,9 +1050,9 @@ ParamGui.prototype.destroy = function() {
 
 /**
  * close popups
- * @method ParamGui#closePopups
+ * @method ParamGui#closePopup
  */
-ParamGui.prototype.closePopups = function() {
+ParamGui.prototype.closePopup = function() {
     this.elements.forEach(element => {
         if (typeof element.closePopup === "function") {
             element.closePopup();

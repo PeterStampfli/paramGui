@@ -1,17 +1,18 @@
 /**
- * showing messages in a parent div
+ * showing messages in a container div
  * @constructor Logger
- * @param {dom element} parent - a div
+ * @param {dom element} container - a div
  */
 
 import {
-    guiUtils
+    ParamGui,
+    guiUtils,
 }
 from "./modules.js";
 
-export function Logger(parent) {
-    this.parent = parent;
-    this.ps = []; // each message as a <p>
+export function Logger(container) {
+    this.container = container;
+    this.paragraphs = []; // each message as a <p>
 }
 
 // spacing between messages in px
@@ -23,27 +24,27 @@ Logger.spacing = 5;
  * @param {string} message - may include html
  */
 Logger.prototype.log = function(message) {
-    const mp = document.createElement("p");
-    mp.innerHTML = message;
-    if (this.ps.length > 0) {
-        mp.style.marginTop = Logger.spacing + "px";
+    const paragraph = document.createElement("p");
+    paragraph.innerHTML = message;
+    if (this.paragraphs.length > 0) {
+        paragraph.style.marginTop = Logger.spacing + "px";
     } else {
-        mp.style.marginTop = "0px";
+        paragraph.style.marginTop = "0px";
     }
-    mp.style.marginBottom = "0px";
-    this.parent.appendChild(mp);
-    this.ps.push(mp);
+    paragraph.style.marginBottom = "0px";
+    this.container.appendChild(paragraph);
+    this.paragraphs.push(paragraph);
 };
 
 /**
- * register parent domElement in guiUtils for styling
+ * register container domElement in guiUtils for styling
  * see docu of guiUtils.style
  * use: logger.style().backgroundColor("red")
  * @method Logger#style
  * @return guiUtils
  */
 Logger.prototype.style = function() {
-    return guiUtils.style(this.parent);
+    return guiUtils.style(this.container);
 };
 
 /**
@@ -51,15 +52,88 @@ Logger.prototype.style = function() {
  * @method Logger#clear
  */
 Logger.prototype.clear = function() {
-    this.ps.forEach(p => p.remove());
-    this.ps.length = 0;
+    this.paragraphs.forEach(p => p.remove());
+    this.paragraphs.length = 0;
 };
 
 /**
- * destroy the logger, remove parent element
+ * destroy the logger, remove container element
  * @method Logger#destroy
  */
 Logger.prototype.destroy = function() {
     this.clear();
-    this.parent.remove();
+    this.container.remove();
 };
+
+
+
+/**
+ * add a logger with a clear button
+ * (the clear button is in the controller object: logger.clearButton)
+ * best wrap it onto a folder logger=gui.addFolder(someName,{closed:false}).addLogger();
+ * @method ParamGui#addLogger
+ * @return {Logger} object
+ */
+ParamGui.prototype.addLogger = function() {
+    const domElement = document.createElement("div");
+    // make a regular spacing between elements
+    domElement.style.padding = this.design.paddingVertical + "px";
+    domElement.style.fontSize = this.design.labelFontSize + "px";
+    domElement.style.height = this.design.loggerHeight + "px";
+    domElement.style.backgroundColor = this.design.loggerBackgroundColor;
+    domElement.style.color = this.design.loggerColor;
+    domElement.style.overflowY = "auto";
+    const logger = new Logger(domElement);
+    this.bodyDiv.appendChild(domElement);
+    this.elements.push(logger);
+    logger.buttonController = this.addButton("clear the log", function() {
+        logger.clear();
+    });
+    logger.buttonController.domElement.style.textAlign = "center";
+    logger.buttonController.deleteLabel();
+    return logger;
+};
+
+/*
+ * a prefab logger that replaces part of the console
+ * in its own gui
+ */
+
+let logger = false;
+
+/**
+ * log something
+ * first message creates the logger
+ * @function log
+ * @param {string} message
+ */
+export function log(message) {
+    if (!logger) {
+        logger = new ParamGui({
+            name: "log",
+            width: "600",
+            horizontalShift: 80,
+            verticalPosition: "top",
+            verticalShift: 40
+        }).addLogger();
+        logger.container.style.height = "";
+
+    }
+    logger.log(message);
+}
+
+
+
+// attach this handler to resize events
+//window.addEventListener("resize", ParamGui.resize, false);
+/*
+ParamGui.prototype.resize = function() {
+    if (this.isRoot() && this.autoPlace) {
+        const design = this.design;
+        // get the height of the title div
+        const titleHeight = this.titleDiv.offsetHeight;
+        const maxHeight = document.documentElement.clientHeight - titleHeight - 2 * design.borderWidth - design.verticalShift;
+        this.bodyDiv.style.maxHeight = maxHeight + "px";
+    }
+};
+*/

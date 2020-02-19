@@ -17,6 +17,10 @@
 
 // do not create globals without good cause
 
+export {
+    saveAs
+}
+from "./fileSaver.js";
 
 export {
     MouseAndTouch,
@@ -30,7 +34,8 @@ export {
 from "./touchEvents.js";
 
 export {
-    Logger
+    Logger,
+    log
 }
 from "./logger.js";
 
@@ -90,29 +95,14 @@ export {
 from "./angleScale.js";
 
 export {
-    paramControllerMethods
-}
-from "./paramControllerMethods.js";
-
-export {
     ColorInput
 }
 from "./colorInput.js";
 
 export {
-    ParamColor
+    output
 }
-from "./paramColor.js";
-
-export {
-    ParamImageSelection
-}
-from "./paramImageSelection.js";
-
-export {
-    ParamTwoNumbers
-}
-from "./paramTwoNumbers.js";
+from "./output.js";
 
 export {
     ImageSelect
@@ -120,16 +110,19 @@ export {
 from "./imageSelect.js";
 
 export {
-    ParamAngle
-}
-from "./paramAngle.js";
-
-export {
     ParamController
 }
 from "./paramController.js";
 
 export {
-    ParamGui
+    ParamGui,
+    NUMBER,
+    TEXT,
+    SELECTION,
+    BUTTON,
+    IMAGE,
+    COLOR,
+    ERROR,
+    BOOLEAN
 }
 from "./paramGui.js";

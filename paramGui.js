@@ -696,7 +696,7 @@ ParamGui.prototype.getRoot = function() {
 };
 
 /**
- * add a folder, it is a gui instance
+ * add a folder, it is a gui instance, open by default
  * @method ParamGui#addFolder
  * @param {String} folderName
  * @param {...Object} designParameters - modifying the design and other parameters
@@ -706,7 +706,7 @@ ParamGui.prototype.addFolder = function(folderName, designParameters) {
     const allParameters = {
         name: folderName,
         closeOnTop: true,
-        closed: true,
+        closed: false,
         parent: this,
         autoPlace: false,
         hideable: false
@@ -740,18 +740,6 @@ ParamGui.prototype.remove = function(element) {
  */
 ParamGui.prototype.removeFolder = ParamGui.prototype.remove;
 
-/*
- * define the kind of controller
- */
-export const NUMBER = "number";
-export const TEXT = "text";
-export const BUTTON = "button";
-export const SELECTION = "selection";
-export const BOOLEAN = "boolean";
-export const IMAGE = "image";
-export const COLOR = "color";
-export const ERROR = "error";
-
 /** 
  * transform from datGui style arguments to the new args object
  * @method ParamGui.createArgs
@@ -766,10 +754,12 @@ export const ERROR = "error";
 ParamGui.createArgs = function(theParams, theProperty, low, high, step) {
     console.log("generating an args object from old-style parameters");
     if (!guiUtils.isObject(theParams)) {
-        console.log("**** There is a problem with the parameter object: " + theParams);
+        console.warn("**** There is a problem with the parameter object: ");
+        console.log(theParams);
     }
     if (!guiUtils.isString(theProperty)) {
-        console.log("**** There is a problem with the property string: " + theProperty);
+        console.warn("**** There is a problem with the property string: ");
+        console.log(theProperty);
     }
     const args = {
         params: theParams,
@@ -782,28 +772,28 @@ ParamGui.createArgs = function(theParams, theProperty, low, high, step) {
         guiUtils.isGoodImageFile(low[Object.keys(low)[0]])) {
         // if design option is true and low is an object (that defines choices)
         // and first low.value is a good image file:  we use the new image selection
-        args.type = IMAGE;
+        args.type = "image";
         args.options = low;
     } else if (guiUtils.isArray(low) || guiUtils.isObject(low)) {
         // low, the first parameter for limits is an array or object, thus make a selection
         // we have to test this first as the paramValue might be anything    
-        args.type = SELECTION;
+        args.type = "selection";
         args.options = low;
     } else if (guiUtils.isBoolean(paramValue)) {
         // the parameter value is boolean, thus make a BooleanButton
-        args.type = BOOLEAN;
+        args.type = "boolean";
     } else if (!guiUtils.isDefined(paramValue) || guiUtils.isFunction(paramValue)) {
         // there is no parameter value with the property or it is a function
         // thus make a button with the property as text, no label
-        args.type = BUTTON;
+        args.type = "button";
         if (guiUtils.isFunction(paramValue)) {
             args.onClick = paramValue;
         }
     } else if (guiUtils.isString(paramValue)) {
         // the parameter value is a string thus make a text input button
-        args.type = TEXT;
+        args.type = "text";
     } else if (guiUtils.isNumber(paramValue)) {
-        args.type = NUMBER;
+        args.type = "number";
         if (guiUtils.isNumber(low)) {
             args.min = low;
         }
@@ -815,8 +805,8 @@ ParamGui.createArgs = function(theParams, theProperty, low, high, step) {
         }
     } else {
         // no idea/error
-        args.type = ERROR;
-        console.log("no fitting controller type found:");
+        args.type = "no fitting type found";
+        console.error("no fitting controller type found for:");
         console.log("property " + theProperty + " with value " + paramValue);
         console.log("low " + low + ", high " + high + ", step " + step);
     }
@@ -853,7 +843,7 @@ ParamGui.createArgs = function(theParams, theProperty, low, high, step) {
 
 /* new arguments object
  *------------------------------------------------------------
- * args.type - values are NUMBER, BUTTON, BOOLEAN, SELECTION, COLOR or IMAGE (mandatory), defines type of controller
+ * args.type - values are strings: "number", "button", "boolean", "selection", "color" or "image", (mandatory), defines type of controller
  * args.params - an object, the controller controls its args.property field (optional)
  * args.property - string, identifier of the parameter (mandatory if there is a args.params object)
  * args.initialValue - initial value for the parameter (optional, else args.params[args.property] or 0)
@@ -904,12 +894,33 @@ ParamGui.prototype.addColor = function(theParams, theProperty) {
         args = {
             params: theParams,
             property: theProperty,
-            type: COLOR
+            type: "color"
         };
-        args.type = COLOR;
+        args.type = "color";
         console.log(args);
     }
     return this.add(args);
+};
+
+/**
+ * add a logger
+ * best put it in an extra gui
+ * or wrap it onto a folder logger=gui.addFolder(someNameString).addLogger();
+ * @method ParamGui#addLogger
+ * @return {Logger} object
+ */
+ParamGui.prototype.addLogger = function() {
+    const container = document.createElement("div");
+    // make a regular spacing between elements
+    container.style.padding = this.design.paddingVertical + "px";
+    container.style.fontSize = this.design.labelFontSize + "px";
+    container.style.height = this.design.loggerHeight + "px";
+    container.style.backgroundColor = this.design.loggerBackgroundColor;
+    container.style.color = this.design.loggerColor;
+    container.style.overflowY = "auto";
+    this.bodyDiv.appendChild(container);
+    const logger = new Logger(this, container);
+    return logger;
 };
 
 /**

@@ -103,10 +103,9 @@ guiUtils.isObject = function(p) {
 
 /**
  * check if some argument is defined
- * return first defined argument else return false 
- * Note: a not existing field of an object gives "undefined" (no type error)
+ * return first defined argument else return undefined 
+ * Warning: a not existing field of an object gives "undefined" (no type error)
  * a field of something "undefined" gives a type error and the program breaks
- * To be safe put as last argument a defined default value
  * @method guiUtils.check
  * @param {...anything} data
  * @return first defined argument, from left to right, default false
@@ -118,7 +117,6 @@ guiUtils.check = function(data) {
             return arguments[i];
         }
     }
-    return false;
 };
 
 /**
@@ -143,6 +141,36 @@ guiUtils.isGoodImageFile = function(fileName) {
         }
     }
     return false;
+};
+
+// standard color strings
+// without alpha: #rrggbb
+// with alpha: #rrggbbaa
+// transforms to color without alpha: #rgb -> #rrggbb, #rgba -> #rrggbb, #rrggbb, #rrggbbaa -> #rrggbb
+// transforms to color with alpha: #rgb -> #rrggbbff, #rgba -> #rrggbbaa, #rrggbb -> #rrggbbff
+const hexDigits = "0123456789abcdefABCDEF";
+
+/**
+ * test if the argument is a correct color string, upper and lower case letters possible
+ * @method guiUtils.isColorString
+ * @param {String} text
+ * @return true color is in correct format
+ */
+guiUtils.isColorString = function(text) {
+    if (guiUtils.isString(text) && (text.charAt(0) === "#")) {
+        const length = text.length;
+        if ((length != 4) && (length != 5) && (length != 7) && (length != 9)) {
+            return false;
+        }
+        for (var i = 1; i < length; i++) {
+            if (hexDigits.indexOf(text.charAt(i)) < 0) { // indexOf returns zero if char not found
+                return false;
+            }
+        }
+        return true;
+    } else {
+        return false;
+    }
 };
 
 /**

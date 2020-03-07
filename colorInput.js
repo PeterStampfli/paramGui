@@ -8,7 +8,8 @@
  */
 
 import {
-    Button
+    Button,
+    guiUtils
 } from "./modules.js";
 
 export function ColorInput(parent, hasAlpha) {
@@ -49,7 +50,8 @@ export function ColorInput(parent, hasAlpha) {
         this.rangeElement.max = 255;
         parent.appendChild(this.rangeElement);
     }
-    if (hasAlpha) { // give all parts a value, set lastValue
+    // initial value is (transparent) black
+    if (hasAlpha) {
         this.setValue("#00000000");
     } else {
         this.setValue("#000000");
@@ -229,35 +231,6 @@ ColorInput.prototype.setWidths = function(textWidth, colorWidth, rangeWidth) {
     }
 };
 
-// standard color strings
-// without alpha: #rrggbb
-// with alpha: #rrggbbaa
-// transforms to color without alpha: #rgb -> #rrggbb, #rgba -> #rrggbb, #rrggbb, #rrggbbaa -> #rrggbb
-// transforms to color with alpha: #rgb -> #rrggbbff, #rgba -> #rrggbbaa, #rrggbb -> #rrggbbff
-
-const hexDigits = "0123456789abcdef";
-
-/**
- * test if a string is a correct color string
- * @method ColorInput.isColorFormat
- * @param {String} color
- * @return true isf color is in correct format
- */
-ColorInput.isColorFormat = function(color) {
-    if (color.charAt(0) !== "#") {
-        return false;
-    }
-    const length = color.length;
-    if ((length != 4) && (length != 5) && (length != 7) && (length != 9)) {
-        return false;
-    }
-    for (var i = 1; i < length; i++) {
-        if (hexDigits.indexOf(color.charAt(i)) < 0) { // indexOf returns zero if char not found
-            return false;
-        }
-    }
-    return true;
-};
 
 /**
  * test if a color string has alpha
@@ -305,10 +278,10 @@ ColorInput.rgbaFrom = function(color) {
         const red = color.charAt(1);
         const green = color.charAt(2);
         const blue = color.charAt(3);
-        const alpha = (length === 5) ? color.charAt(4) : "f";
+        const alpha = (length === 5) ? color.charAt(4) : "F";
         result = "#" + red + red + green + green + blue + blue + alpha + alpha;
     } else if (length === 7) { // #rrggbb 
-        result += "ff";
+        result += "FF";
     }
     return result;
 };
@@ -375,8 +348,7 @@ ColorInput.prototype.getValue = function() {
  * @param {String} text
  */
 ColorInput.prototype.setValue = function(text) {
-    text = text.toLowerCase();
-    if (ColorInput.isColorFormat(text)) {
+    if (guiUtils.isColorString(text)) {
         const color = this.colorFrom(text);
         this.lastValue = color;
         this.textElement.value = color;
@@ -384,6 +356,10 @@ ColorInput.prototype.setValue = function(text) {
         if (this.hasAlpha) {
             this.rangeElement.value = this.alphaFrom(color);
         }
+    } else {
+        console.error("ColorInput#setValue: argument is not a good color string");
+        console.log('its value is ' + text + ' of type "' + (typeof text) + '"');
+        console.log("should be a string of form '#rrggbb' or '#rrggbbaa'");
     }
 };
 
@@ -395,8 +371,7 @@ ColorInput.prototype.setValue = function(text) {
  * @param {String} text - the color
  */
 ColorInput.prototype.updateValue = function(text) {
-    text = text.toLowerCase();
-    if (ColorInput.isColorFormat(text)) {
+    if (guiUtils.isColorString(text)) {
         const color = this.colorFrom(text);
         if (this.lastValue !== color) {
             this.setValue(color);
@@ -404,6 +379,9 @@ ColorInput.prototype.updateValue = function(text) {
         }
     } else {
         this.setValue(this.lastValue);
+        console.error("ColorInput#updateValue: argument is not a good color string");
+        console.log('its value is ' + text + ' of type "' + (typeof text) + '"');
+        console.log("should be a string of form '#rrggbb' or '#rrggbbaa'");
     }
 };
 

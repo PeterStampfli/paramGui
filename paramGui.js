@@ -58,7 +58,7 @@ export function ParamGui(params) {
     this.helpButton = null;
     this.autoPlace = true;
     this.hideable = true;
-    this.closed = false;
+    this.closed = true;
     this.closeOnTop = true;
     // read/merge params object replacing defaults
     // applies only to the parameters above
@@ -82,14 +82,12 @@ export function ParamGui(params) {
         guiUtils.updateValues(design, arguments[i]);
     }
     // update the popup parameters depending on the gui position
-    if (design.horizontalPosition === "right") {
-        design.popupPosition = "bottomRight";
+    if (this.design.horizontalPosition === "right") {
+        this.design.popupPosition = "bottomRight";
     } else {
-        design.popupPosition = "bottomLeft";
+        this.design.popupPosition = "bottomLeft";
     }
-    design.popupHorizontalShift = design.width + design.horizontalShift + design.borderWidth;
-    // the ui elements go into their own div, the this.bodyDiv
-    // append as child to this.domElement
+    this.design.popupHorizontalShift = this.design.width + this.design.horizontalShift + this.design.borderWidth;
     this.bodyDiv = document.createElement("div");
     this.bodyDiv.style.backgroundColor = design.backgroundColor;
     if (this.isRoot()) {
@@ -301,6 +299,8 @@ ParamGui.defaultDesign = {
 };
 
 // other parameters
+// switch on log for conversion from datGui-style to new style
+ParamGui.logConversion = false;
 // base z-index for ui divs, to keep them above others
 // the guis will have z-indizes of zIndex,zIndex+1, ... zIndex+number of guis -1
 ParamGui.zIndex = 5;
@@ -696,6 +696,14 @@ ParamGui.prototype.getRoot = function() {
 };
 
 /**
+ * make that the gui becomes visible above all others
+ * @method ParamGui#toFront
+ */
+ParamGui.prototype.toFront = function() {
+    ParamGui.moveToFront(this);
+};
+
+/**
  * add a folder, it is a gui instance, open by default
  * @method ParamGui#addFolder
  * @param {String} folderName
@@ -706,7 +714,7 @@ ParamGui.prototype.addFolder = function(folderName, designParameters) {
     const allParameters = {
         name: folderName,
         closeOnTop: true,
-        closed: false,
+        closed: true,
         parent: this,
         autoPlace: false,
         hideable: false
@@ -740,6 +748,31 @@ ParamGui.prototype.remove = function(element) {
  */
 ParamGui.prototype.removeFolder = ParamGui.prototype.remove;
 
+/**
+ * test datGui style parameters:
+ * theParams is object
+ * theProperty is string
+ * @method ParamGui.checkParamsProperty
+ * @param {object} theParams
+ * @param {string} theProperty
+ * @return boolean, true if ok, false else
+ */
+ParamGui.checkParamsProperty = function(theParams, theProperty) {
+    let result = true;
+    if (!(guiUtils.isObject(theParams) || (guiUtils.isArray(theParams)))) {
+        console.error("datGui-style: the parameter argument is not an object or an array: ");
+        console.log('its value is ' + theParams + ' of type "' + (typeof theParams) + '"');
+        console.log("the property argument is: " + theProperty);
+        result = false;
+    }
+    if (!(guiUtils.isString(theProperty) || (guiUtils.isNumber(theProperty)))) {
+        console.error("datGui-style: the property argument is not a string or a number: ");
+        console.log('its value is ' + theProperty + ' of type "' + (typeof theProperty) + '"');
+        result = false;
+    }
+    return result;
+};
+
 /** 
  * transform from datGui style arguments to the new args object
  * @method ParamGui.createArgs
@@ -748,18 +781,11 @@ ParamGui.prototype.removeFolder = ParamGui.prototype.remove;
  * @param {float/integer/array} low - determines lower limit/choices (optional)
  * @param {float/integer} high - determines upper limit (optional)
  * @param {float/integer} step - determines step size (optional)
- * @return object args, for the new style
+ * @return object
  */
-
 ParamGui.createArgs = function(theParams, theProperty, low, high, step) {
-    console.log("generating an args object from old-style parameters");
-    if (!guiUtils.isObject(theParams)) {
-        console.warn("**** There is a problem with the parameter object: ");
-        console.log(theParams);
-    }
-    if (!guiUtils.isString(theProperty)) {
-        console.warn("**** There is a problem with the property string: ");
-        console.log(theProperty);
+    if (ParamGui.logConversion) {
+        console.log("Add: Generating an argument object from datGui-style parameters");
     }
     const args = {
         params: theParams,
@@ -770,7 +796,7 @@ ParamGui.createArgs = function(theParams, theProperty, low, high, step) {
     // add other fields to args depending on the type
     if (guiUtils.isObject(low) &&
         guiUtils.isGoodImageFile(low[Object.keys(low)[0]])) {
-        // if design option is true and low is an object (that defines choices)
+        // if low is an object (that defines choices)
         // and first low.value is a good image file:  we use the new image selection
         args.type = "image";
         args.options = low;
@@ -805,23 +831,33 @@ ParamGui.createArgs = function(theParams, theProperty, low, high, step) {
         }
     } else {
         // no idea/error
-        args.type = "no fitting type found";
-        console.error("no fitting controller type found for:");
-        console.log("property " + theProperty + " with value " + paramValue);
-        console.log("low " + low + ", high " + high + ", step " + step);
+        args.type = "noType";
+        console.error("Add controller: no fitting controller type found for datGui API parameters");
+        if (guiUtils.isDefined(low)) {
+            console.log('property "' + theProperty + '" with parameter value ' + paramValue + " and low " + low);
+        } else {
+            console.log('property "' + theProperty + '" with parameter value ' + paramValue);
+        }
     }
-    console.log(args);
+    if (ParamGui.logConversion) {
+        console.log("property " + theProperty + " with value " + paramValue + ' of type "' + (typeof paramValue) + '"');
+        console.log("generated parameter object:");
+        console.log(args);
+    }
     return args;
 };
-
 
 /**
  * add a controller for a parameter, one controller on a line, in its div
  * depending on its value and limits
  * parameters as in datGui.js for compatibility
  * or a single argument objects that has all information and gives more flexibility
+ * ATTENTION: Creates only the controller and sets its value. Does NOT call any callback.
+ * Checks compatibility of initial values and controller type.
+ * If not compatible makes an error message and might modify the parameter value.
+ * YOU should update any objects that uses the data of controllers after setting up the gui.
  * @method ParamGui#add
- * @param {Object} theParams - object that has the parameter as a field, or an object with all information for the controller
+ * @param {Object} theParams - object that has the parameter as a field, or an object with all information for the controller, or false for error
  * @param {String} theProperty - key for the field of params to change, params[property]
  * @param {float/integer/array} low - determines lower limit/choices (optional)
  * @param {float/integer} high - determines upper limit (optional)
@@ -831,19 +867,21 @@ ParamGui.createArgs = function(theParams, theProperty, low, high, step) {
 
 /* Old datGui style parameters (backwards compatible with datGui.js)
  *-------------------------------------------------------------------
- * if low is an object or array then make a selection or a new image select
- * if theParams[theProperty] is undefined make a button (action defined by onClick method of the controller object
+ * if low is an object or array then make a selection or a new image select (if the first selectable value is a string, which is an image file path)
+ * if theParams[theProperty] is undefined or a function then make a button (action defined by onClick method of the controller object
  * if theParams[theProperty] is boolean make a booleanButton
  * if theParams[theProperty] is a string make a text textInput  
  * if theParams[theProperty] is a function make a button with this function as onClick method 
  * if theParams[theProperty] is a number make a number button with lower and upper limits if defined, 
  *                                 if step is not defined, then a step size is deduced from the parameter value
  *                                 function buttons and range can be added to the domElement or the popup (if exists)
+ *
+ * to make a controller for colors you have to use ParamGui#addColor
  */
 
 /* new arguments object
  *------------------------------------------------------------
- * args.type - values are strings: "number", "button", "boolean", "selection", "color" or "image", (mandatory), defines type of controller
+ * args.type - values are strings: "number", "text", "button", "boolean", "selection", "color" or "image", (mandatory), defines type of controller
  * args.params - an object, the controller controls its args.property field (optional)
  * args.property - string, identifier of the parameter (mandatory if there is a args.params object)
  * args.initialValue - initial value for the parameter (optional, else args.params[args.property] or 0)
@@ -861,45 +899,75 @@ ParamGui.createArgs = function(theParams, theProperty, low, high, step) {
  * args.stepSize - value for step of NUMBER controllers (optional, default is obtained from the initial value)
  */
 
+/* find details about controllers depending on controller type
+ *---------------------------------------------------
+ * type="number" - see numberButton.js
+ * type="button" - see button.js
+ * type="boolean" - see booleanButton.js
+ * type="selection" - see selectValues.js, args.options (or low) has to be an array of values or an object with key:value pairs,
+ *                    the initial value has to be one of the selectable values
+ * type="image" - see imageSelect.js, you can use this to select input images or presets (represented as images)
+ *                 compatibility with datGui (only selecting images):
+ *                    args.options (or low) is an object with key: value pairs, where the values are image file path strings
+ *                    Note that there should be no key=="name"  or key=="value"
+ *                 advanced:
+ *                    args.options is an array of objects
+ *                    each object has "name", "icon" and "value" keys
+ *                    object.name is a string that names the choice
+ *                    object.icon is an image file path string (URL) or an image data url. Illustrates the choice
+ *                    object.value is what gets selected, an image file path string for an input image file, or a file path to *.json file
+ * type="text" - see textInput.js
+ * type="color" - see colorInput.js, values is a string of type "#rrggbb" (opaque) or "#rrggbbaa" (with transparency)
+ */
 ParamGui.prototype.add = function(theParams, theProperty, low, high, step) {
-    var args;
+    let args = false;
     if (arguments.length === 1) {
-        args = theParams; // the new version
-    } else {
+        args = theParams;
+    } else if (ParamGui.checkParamsProperty(theParams, theProperty)) {
         args = ParamGui.createArgs(theParams, theProperty, low, high, step);
     }
-    const controllerDomElement = document.createElement("div");
-    // make a regular spacing between elements
-    controllerDomElement.style.paddingTop = this.design.paddingVertical + "px";
-    controllerDomElement.style.paddingBottom = this.design.paddingVertical + "px";
-    const controller = new ParamController(this, controllerDomElement, args);
-    // change dom after all work has been done
-    this.bodyDiv.appendChild(controllerDomElement);
+    let controller = false;
+    if (args) {
+        const controllerDomElement = document.createElement("div");
+        // make a regular spacing between elements
+        controllerDomElement.style.paddingTop = this.design.paddingVertical + "px";
+        controllerDomElement.style.paddingBottom = this.design.paddingVertical + "px";
+        controller = new ParamController(this, controllerDomElement, args);
+        this.bodyDiv.appendChild(controllerDomElement);
+    } else {
+        const message = document.createElement("div");
+        message.innerHTML = "&nbsp DatGui-style parameters are not ok";
+        console.error("no controller generated because DatGui-style parameters are not ok");
+        this.bodyDiv.appendChild(message);
+    }
     return controller;
 };
 
 /**
  * make a controller for color, datGui.js style parameters
  * @method ParamGui#addColor
- * @param {Object} theParams - object that has the parameter as a field, or args object that has all data
+ * @param {Object} theParams - object that has the parameter as a field, or argument object that has all data
  * @param {String} theProperty - key for the field of params to change, theParams[theProperty]
  * @return {ParamController} object
  */
 ParamGui.prototype.addColor = function(theParams, theProperty) {
-    var args;
+    let args = false;
     if (arguments.length === 1) {
         args = theParams; // the new version
-    } else {
-        console.log("generating an args object from old-style parameters");
+    } else if (ParamGui.checkParamsProperty(theParams, theProperty)) {
         args = {
             params: theParams,
             property: theProperty,
             type: "color"
         };
-        args.type = "color";
-        console.log(args);
+        if (ParamGui.logConversion) {
+            console.log("Paramgui#addColor: generating an argument object from datGui-style parameters");
+            console.log('property "' + theProperty + '" with value ' + theParams[theProperty] + ", generated parameter object:");
+            console.log(args);
+        }
     }
-    return this.add(args);
+    let controller = this.add(args);
+    return controller;
 };
 
 /**
@@ -1069,4 +1137,124 @@ ParamGui.prototype.closePopup = function() {
             element.closePopup();
         }
     });
+};
+
+// output elements
+//  create a div container for output elements (canvas)
+//==============================================================
+
+/**
+ * get the limit for free space at the left
+ * taking into account all guis at the left side
+ * @method ParamGui#leftSpaceLimit
+ * @return number, for the left offset of a fitting container
+ */
+ParamGui.leftSpaceLimit = function() {
+    let spaceLimit = 0;
+    ParamGui.rootGuis.forEach(gui => {
+        if (gui.design.horizontalPosition === "left") {
+            spaceLimit = Math.max(gui.design.horizontalShift + gui.design.width + 2 * gui.design.borderWidth, spaceLimit);
+        }
+    });
+    return spaceLimit;
+};
+
+/**
+ * get the limit for free space at the right
+ * taking into account all guis at the right hand side
+ * @method ParamGui#rightSpaceLimit
+ * @return number, the width of fitting container is difference between right and left limit
+ */
+ParamGui.rightSpaceLimit = function() {
+    let space = 0;
+    ParamGui.rootGuis.forEach(gui => {
+        if (gui.design.horizontalPosition === "right") {
+            space = Math.max(gui.design.horizontalShift + gui.design.width + 2 * gui.design.borderWidth, space);
+        }
+    });
+    // with window.innerWidth we do not get some ghosts of scroll bars
+    // document.documentElement.clientWidth upon reducing screen height gives a smaller width because of spurious vertical scroll bar
+    //  const spaceLimit = window.innerWidth - space;
+    const spaceLimit = document.documentElement.clientWidth - space;
+    return spaceLimit;
+};
+
+ParamGui.outputDiv = false;
+
+/**
+ * resizing the content of the output div
+ * does nothing here, overwrite depending on content
+ * output div will have its final dimension when calling this
+ * so you can use its clientWidth/Height
+ * @method ParamGui.resizeOutputContent
+ */
+ParamGui.resizeOutputContent = function() {};
+
+/**
+ * resizing the output div and setting its scrolling
+ * sets width and height of the output div
+ * calls resize function for contents
+ * determines size of content
+ * then activates scroll bars
+ * @method ParamGui.resizeOutputDiv
+ */
+ParamGui.resizeOutputDiv = function() {
+    const leftOfSpace = ParamGui.leftSpaceLimit();
+    const widthOfSpace = ParamGui.rightSpaceLimit() - leftOfSpace;
+    ParamGui.outputDiv.style.left = leftOfSpace + "px";
+    // resize content: set up final dimensions of the div
+    // you can use them to resize content
+    // overflow hidden makes that scroll bars do not reduce client width or height
+    ParamGui.outputDiv.style.width = widthOfSpace + "px";
+    ParamGui.outputDiv.style.height = window.innerHeight + "px"; // no scroll bars !
+    ParamGui.outputDiv.style.overflow = "hidden";
+    // now resize content
+    ParamGui.resizeOutputContent();
+    // get size of contents
+    // no height and width given => shrink wrap
+    ParamGui.outputDiv.style.height = "";
+    ParamGui.outputDiv.style.width = "";
+    // now we can get size of content with clientWidth/Height
+    const widthOfContent = ParamGui.outputDiv.clientWidth;
+    const heightOfContent = ParamGui.outputDiv.clientHeight;
+    // again set final dimensions
+    ParamGui.outputDiv.style.width = widthOfSpace + "px";
+    ParamGui.outputDiv.style.height = window.innerHeight + "px";
+    // see if content is too wide and horizontal scroll bars are required
+    if (widthOfContent > ParamGui.outputDiv.clientWidth) {
+        ParamGui.outputDiv.style.overflowX = "scroll";
+    }
+    // see if content is too high (including a possible scroll bar)
+    if (heightOfContent > ParamGui.outputDiv.clientHeight) {
+        ParamGui.outputDiv.style.overflowY = "scroll";
+        // the clientwidth has been reduced, and we may need a herizontal scroll bar now
+        if (widthOfContent > ParamGui.outputDiv.clientWidth) {
+            ParamGui.outputDiv.style.overflowX = "scroll";
+        }
+    }
+};
+
+/**
+ * create an output div fitting the guis
+ * it will be in ParamGui.outputDiv
+ * it will fit between the guis at the left and those at the right
+ * you can have more than one canvas in the output div ...
+ * @method ParamGui.createOutputDiv
+ * @return the output div
+ */
+ParamGui.createOutputDiv = function() {
+    if (ParamGui.outputDiv) {
+        console.error("ParamGui.outputDiv exists already!");
+    } else {
+        ParamGui.outputDiv = document.createElement("div");
+        ParamGui.outputDiv.style.position = "absolute";
+        ParamGui.outputDiv.style.top = "0px";
+
+        ParamGui.outputDiv.style.backgroundColor = "blue";
+
+        ParamGui.resizeOutputDiv();
+        document.body.appendChild(ParamGui.outputDiv);
+        window.addEventListener("resize", ParamGui.resizeOutputDiv, false);
+    }
+    return ParamGui.outputDiv;
 };

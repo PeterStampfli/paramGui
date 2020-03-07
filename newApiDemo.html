@@ -19,9 +19,12 @@ import {
 }
 from "./modules.js";
 
+ParamGui.logConversion = true;
 
-const gui = new ParamGui({}, {
-    name: "gui with new api"
+
+const gui = new ParamGui({
+    name: "gui with new api",
+    closed:false
 });
 
 gui.addParagraph("This is a <strong>demo</strong> for the new gui API. See the source code");
@@ -72,6 +75,7 @@ const popController = gui.add({
         type: "number",
         labelText: "pop",
         min: 1,
+        initialValue:3,
         onChange: function(value) {
             console.log("pop value: " + value);
         }
@@ -81,7 +85,7 @@ const popController = gui.add({
     .createMulDivButtons()
     .createSuggestButton(500);
 gui.addParagraph("The indicator can go to the popup:");
-parameters.popIn = 100;
+parameters.popIn = 10;
 gui.add(parameters, "popIn", 0, 20)
     .createPlusMinusButtons()
     .createIndicator()

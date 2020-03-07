@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+
+<head>
+    <title>error demo gui</title>
+</head>
+
+<body>
+
+
+</body>
+
+<script type="module">
+import {
+    ParamGui,
+    InstantHelp
+}
+from "./modules.js";
+//ParamGui.logConversion=true;
+
+const gui = new ParamGui({closed: false}, {
+    name: "error test"
+});
+
+const p={}
+p.n=3
+const nn=gui.add(p,"n")
+nn.onChange(function(){console.log(p)})
+console.log(nn)
+
+p.ob= {}
+gui.add(p,"ob")
+</script>
+
+</html>

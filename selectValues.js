@@ -7,12 +7,14 @@
  */
 
 import {
-    Select
+    Select,
+    guiUtils
 } from "./modules.js";
 
 export function SelectValues(parent) {
     this.select = new Select(parent);
     this.values = [];
+    this.names = [];
 
     var selectValues = this;
 
@@ -57,7 +59,8 @@ SelectValues.prototype.setFontSize = function(size) {
  * @method SelectValues#clear
  */
 SelectValues.prototype.clear = function() {
-    this.values = [];
+    this.values.length = 0;
+    this.names.length = 0;
     this.select.clear();
 };
 
@@ -69,6 +72,7 @@ SelectValues.prototype.clear = function() {
  */
 SelectValues.prototype.addOption = function(name, value) {
     this.select.addOptions(name);
+    this.names.push(name);
     this.values.push(value);
 };
 
@@ -80,17 +84,20 @@ SelectValues.prototype.addOption = function(name, value) {
  * @param {Array||Object} options
  */
 SelectValues.prototype.addOptions = function(options) {
-    if (Array.isArray(options)) {
+    if (guiUtils.isArray(options)) {
         options.forEach(option => this.addOption(option, option));
-    } else {
+    } else if (guiUtils.isObject(options)) {
         // an object defines selection values as value[key] pair, key is shown as name of a selection (option)
         const names = Object.keys(options);
         names.forEach(name => this.addOption(name, options[name]));
+    } else {
+        console.error("SelectValues#addOptions: argument is not an array and not an object");
+        console.log('its value is ' + options + ' of type "' + (typeof options) + '"');
     }
 };
 
 /**
- * get the index
+ * get the selected index
  * @method SelectValues#getIndex
  * @return integer, the selected index
  */
@@ -120,14 +127,35 @@ SelectValues.prototype.getValue = function() {
 };
 
 /**
- * set the value
+ * find the index for a given value
+ * searches first the selection values, then the labels
+ * @method SelectValues#findIndex
+ * @param {whatever} value
+ * @return number, the fitting index >=0, -1 if not found
+ */
+SelectValues.prototype.findIndex = function(value) {
+    let index = this.values.indexOf(value);
+    if (index < 0) {
+        index = this.names.indexOf(value);
+    }
+    return index;
+};
+
+/**
+ * set the choice, 
+ * searches the values and then the labels, if not found makes error message
  * does not call the onChange callback
  * @method SelectValues#setValue
  * @param {whatever} value
  */
 SelectValues.prototype.setValue = function(value) {
-    const index = this.values.indexOf(value);
-    this.setIndex(index);
+    const index = this.findIndex(value); // searches both
+    if (index >= 0) {
+        this.setIndex(index);
+    } else {
+        console.error("Selection controller, setValue: argument not found in options");
+        console.log('argument value is ' + value + ' of type "' + (typeof value) + '"');
+    }
 };
 
 /**

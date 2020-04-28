@@ -1,3 +1,5 @@
+/* jshint esversion: 6 */
+
 // aggregator
 // import all from a common source
 //===================================================
@@ -16,11 +18,6 @@
 // better not rely on this
 
 // do not create globals without good cause
-
-export {
-    saveAs
-}
-from "./fileSaver.js";
 
 export {
     MouseAndTouch,
@@ -53,6 +50,11 @@ export {
     ImageButton
 }
 from "./imageButton.js";
+
+export {
+    TextAreaInOut
+}
+from './textAreaInOut.js';
 
 export {
     Popup
@@ -98,6 +100,16 @@ export {
     ImageSelect
 }
 from "./imageSelect.js";
+
+export {
+    output
+}
+from "./output.js";
+
+export {
+    animation
+}
+from "./animation.js";
 
 export {
     ParamController

@@ -1,3 +1,5 @@
+/* jshint esversion: 6 */
+
 /**
  * utilities for the gui
  * @namespace guiUtils
@@ -5,7 +7,9 @@
 
 export const guiUtils = {};
 
-// functions that check parameters, for overloading methods
+//=============================================================================
+// functions that check the type of parameters, 
+//==============================================================================
 
 /**
  * test if a variable is defined, and not missing in the call, 
@@ -102,13 +106,28 @@ guiUtils.isObject = function(p) {
 };
 
 /**
+* safely call argument if it is defined and a function
+* @method guiUtils.do
+* @param {whatever} fun
+*/
+guiUtils.do=function(fun){
+    if (guiUtils.isFunction(fun)){
+        fun();
+    }
+}
+
+//===============================================================================
+// various checks of data, updating data
+//=================================================================================
+
+/**
  * check if some argument is defined
  * return first defined argument else return undefined 
  * Warning: a not existing field of an object gives "undefined" (no type error)
  * a field of something "undefined" gives a type error and the program breaks
  * @method guiUtils.check
  * @param {...anything} data
- * @return first defined argument, from left to right, default false
+ * @return first defined argument, from left to right, returns undefined if nothing is defined
  */
 guiUtils.check = function(data) {
     const length = arguments.length;
@@ -117,6 +136,7 @@ guiUtils.check = function(data) {
             return arguments[i];
         }
     }
+    // return undefined, by default
 };
 
 /**
@@ -189,6 +209,7 @@ guiUtils.updateValues = function(toObject, fromObject) {
     }
 };
 
+//============================================================================
 //   styles, DOM elements
 //============================================================================
 
@@ -292,6 +313,10 @@ addStyles([
     "overflow"
 ]);
 
+//==============================================================================
+// spacing
+//==============================================================================
+
 /**
  * create a horizontal space
  * @method guiUtils.hSpace
@@ -321,8 +346,13 @@ guiUtils.vSpace = function(parent, height) {
     return space;
 };
 
+//==========================================================================
+// display style
+
 /**
  * make that the element display style has given value
+ * checks if the element really exists (avoid errors of type *** is not a function)
+ * checck if element has already the style (avoid reflows)
  * @method guiUtils.setDisplayStyle
  * @param {htmlElement} element
  * @param {string} value
@@ -360,6 +390,9 @@ guiUtils.displayInlineBlock = function(element) {
     guiUtils.setDisplayStyle(element, "inline-block");
 };
 
+//==============================================================================
+// determine position of an element
+//===============================================================================
 
 /**
  * determine top position of an element, including scroll of the parents
@@ -391,4 +424,45 @@ guiUtils.topPosition = function(theElement) {
         element = element.parentElement; // important: does not double count offsetTop
     }
     return offsetY - scrollY;
+};
+
+//================================================================================
+// saving on a file
+//================================================================================
+
+// save blob to a file using an off-screen a-tag element
+
+function saveBlobAsFile(blob, filename) {
+    const objURL = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.style.display = "none";
+    document.body.appendChild(a);
+    a.href = objURL;
+    a.download = filename;
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(objURL);
+}
+
+/**
+ * save canvas image as a file
+ * execute an optional callback
+ * @method guiUtils.saveCanvasAsFile
+ * @param {canvas} canvas
+ * @param {string} filename - without extension
+ * @param {string} extension - 'png' or 'jpg'
+ * @param {function} callback - optional
+ */
+guiUtils.saveCanvasAsFile = function(canvas, filename, extension,callback=function(){}) {
+    if (extension === 'png') {
+        canvas.toBlob(function(blob) {
+            saveBlobAsFile(blob, filename + '.png');
+            callback();
+        }, 'image/png');
+    } else {
+        canvas.toBlob(function(blob) {
+            saveBlobAsFile(blob, filename + '.jpg');
+            callback();
+        }, 'image/jpeg');
+    }
 };

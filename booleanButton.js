@@ -1,3 +1,5 @@
+/* jshint esversion: 6 */
+
 /**
  * representing a switch button with on/off True/false states and adding actions, can use any html element
  *
@@ -6,7 +8,8 @@
  */
 
 import {
-    guiUtils
+    guiUtils,
+    Button
 } from "./modules.js";
 
 export function BooleanButton(parent) {
@@ -38,58 +41,62 @@ export function BooleanButton(parent) {
      * @method BooleanButton#onInteraction
      */
     this.onInteraction = function() {
-        console.log("range Interaction");
+        console.log("booleanButton Interaction");
     };
 
     // a list of actions....
 
     var button = this;
 
-    this.element.onchange = function() {
-        button.onChange();
-    };
-
     this.element.onmousedown = function() {
-        button.value = !button.value;
-        button.mouseDown = true;
-        button.onInteraction();
-        button.updateStyle();
+        if (button.active) {
+            button.value = !button.value;
+            button.mouseDown = true;
+            button.onInteraction();
+            button.updateStyle();
+        }
     };
 
     this.element.onmouseup = function() {
-        if (button.mouseDown) {
-            button.mouseDown = false;
-            button.onChange();
+        if (button.active) {
+            if (button.mouseDown) {
+                button.mouseDown = false;
+                button.onChange();
+            }
+            button.element.blur();
+            button.updateStyle();
         }
-        button.element.blur();
-        button.updateStyle();
     };
 
     // hovering
     this.element.onmouseenter = function() {
-        button.hover = true;
-        button.updateStyle();
+        if (button.active) {
+            button.hover = true;
+            button.updateStyle();
+        }
     };
 
     this.element.onmouseleave = function() {
-        button.hover = false;
-        button.element.onmouseup();
+        if (button.active) {
+            button.hover = false;
+            button.element.onmouseup();
+        }
     };
 }
 
 // default colors
-// for active button, depending on hoovering and if it is pressed
-BooleanButton.colorOn = "#444444";
-BooleanButton.colorOnHover = "black";
-BooleanButton.colorOffHover = "black";
-BooleanButton.colorOff = "#444444";
+// for active button, depending on hoovering and if its value is true or false
+BooleanButton.colorOn = Button.colorDown;
+BooleanButton.colorOnHover = Button.colorDownHover;
+BooleanButton.colorOffHover = Button.colorUpHover;
+BooleanButton.colorOff = Button.colorUp;
 BooleanButton.backgroundColorOn = "#88ff88";
 BooleanButton.backgroundColorOnHover = "#00ff00";
 BooleanButton.backgroundColorOffHover = "#ff0000";
 BooleanButton.backgroundColorOff = "#ff8888";
 // for switched off
-BooleanButton.colorInactive = "black";
-BooleanButton.backgroundColorInactive = "#aaaaaa";
+BooleanButton.colorInactive = Button.colorInactive;
+BooleanButton.backgroundColorInactive = Button.backgroundColorInactive;
 
 /**
  * setup the color styles defaults
@@ -116,9 +123,13 @@ BooleanButton.prototype.colorStyleDefaults = function() {
  * @method BooleanButton#updateStyle
  */
 BooleanButton.prototype.updateStyle = function() {
+    if (this.value) {
+        this.element.textContent = this.textOn;
+    } else {
+        this.element.textContent = this.textOff;
+    }
     if (this.active) {
         if (this.value) {
-            this.element.textContent = this.textOn;
             if (this.hover) {
                 guiUtils.style(this.element)
                     .color(this.colorOnHover)
@@ -129,7 +140,6 @@ BooleanButton.prototype.updateStyle = function() {
                     .backgroundColor(this.backgroundColorOn);
             }
         } else {
-            this.element.textContent = this.textOff;
             if (this.hover) {
                 guiUtils.style(this.element)
                     .color(this.colorOffHover)
@@ -141,7 +151,6 @@ BooleanButton.prototype.updateStyle = function() {
             }
         }
     } else {
-        this.element.textContent = "-";
         guiUtils.style(this.element)
             .color(this.colorInactive)
             .backgroundColor(this.backgroundColorInactive);
@@ -165,6 +174,13 @@ BooleanButton.prototype.setFontSize = function(size) {
 BooleanButton.prototype.setWidth = function(width) {
     this.element.style.width = width + "px";
 };
+
+/**
+ * set if button is active
+ * @method BooleanButton#setActive
+ * @param {boolean} isActive
+ */
+BooleanButton.prototype.setActive = Button.prototype.setActive;
 
 /**
  * get value of booleanButton

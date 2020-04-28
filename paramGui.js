@@ -1,3 +1,5 @@
+/* jshint esversion: 6 */
+
 /*
  * emulator of  https://github.com/dataarts/dat.gui
  * 
@@ -104,8 +106,6 @@ export function ParamGui(params) {
         ParamGui.addRootGui(this);
         // add the title
         this.createTitle();
-        // autoPlacing the root gui domElement relative to one of the four corners
-        // and make the bodyDiv scrolling vertical, if needed
         this.domElement.appendChild(this.bodyDiv);
 
         const gui = this;
@@ -113,7 +113,8 @@ export function ParamGui(params) {
             ParamGui.moveToFront(gui);
             ParamGui.closePopups(gui);
         };
-
+        // autoPlacing the root gui domElement relative to one of the four corners
+        // and make the bodyDiv scrolling vertical, if needed
         if (this.autoPlace) {
             this.domElement.style.position = "fixed";
             this.domElement.style[design.verticalPosition] = design.verticalShift + "px";
@@ -227,7 +228,7 @@ ParamGui.defaultDesign = {
     titleFontSize: 14,
     titleFontWeight: "bold", // lighter, normal , bold, bolder, depending on font
     // width of the open/close button span, if too small collapses?
-    closeOpenButtonWidth: 30,
+    closeOpenButtonWidth: 40,
     // colors
     titleColor: "#000000",
     titleBackgroundColor: "#bbbbbb",
@@ -323,14 +324,23 @@ ParamGui.updateDefaultDesign = function(newValues) {
 };
 
 /**
+ * update design of this ParamGui instance, using data of another object with the same key 
+ * @method ParamGui#updateDesign
+ * @param {Object} newValues
+ */
+ParamGui.prototype.updateDesign = function(newValues) {
+    guiUtils.updateValues(this.design, newValues);
+};
+
+/**
  * add a span with a space to the parent element
- * use ParamGui.spaceWidth as parameter !!!
  * @method ParamGui.addSpace
  * @param {HTMLElement} parent
+ * @param {int} width - default is ParamGui.spaceWidth
  */
-ParamGui.addSpace = function(parent) {
+ParamGui.addSpace = function(parent, width = ParamGui.spaceWidth) {
     const theSpan = document.createElement("span");
-    theSpan.style.width = ParamGui.spaceWidth + "px";
+    theSpan.style.width = width + "px";
     theSpan.style.display = "inline-block";
     parent.appendChild(theSpan);
 };
@@ -534,6 +544,9 @@ ParamGui.prototype.createTitle = function() {
             this.closeOpenButton.element.style.outline = "none";
             this.closeOpenButton.setFontSize(design.titleFontSize);
             this.closeOpenButton.setWidth(design.closeOpenButtonWidth);
+            this.closeOpenButton.onInteraction = function() {
+                ParamGui.closePopups();
+            };
             const paramGui = this;
             this.closeOpenButton.onClick = function() {
                 paramGui.close();
@@ -613,6 +626,15 @@ ParamGui.prototype.hide = function() {
         this.bodyDiv.style.display = "none";
     }
     this.closePopup();
+};
+
+/**
+ * set if gui is active (or read only for false)
+ * @method ParamGui#setActive
+ * @param {boolean} isActive
+ */
+ParamGui.prototype.setActive = function(isActive) {
+       this.elements.forEach(element => element.setActive(isActive));
 };
 
 /**
@@ -706,20 +728,24 @@ ParamGui.prototype.toFront = function() {
 /**
  * add a folder, it is a gui instance, open by default
  * @method ParamGui#addFolder
- * @param {String} folderName
+ * @param {String} folderName - optional, for compatibility with datgui
  * @param {...Object} designParameters - modifying the design and other parameters
  * @return ParamGui instance (that's the folder)
  */
 ParamGui.prototype.addFolder = function(folderName, designParameters) {
     const allParameters = {
-        name: folderName,
         closeOnTop: true,
         closed: true,
         parent: this,
         autoPlace: false,
         hideable: false
     };
-    for (var i = 1; i < arguments.length; i++) {
+    var firstParamsIndex = 0;
+    if (guiUtils.isString(folderName)) {
+        firstParamsIndex = 1;
+        allParameters.name = folderName;
+    }
+    for (var i = firstParamsIndex; i < arguments.length; i++) {
         Object.assign(allParameters, arguments[i]);
     }
     const folder = new ParamGui(allParameters);
@@ -748,31 +774,6 @@ ParamGui.prototype.remove = function(element) {
  */
 ParamGui.prototype.removeFolder = ParamGui.prototype.remove;
 
-/**
- * test datGui style parameters:
- * theParams is object
- * theProperty is string
- * @method ParamGui.checkParamsProperty
- * @param {object} theParams
- * @param {string} theProperty
- * @return boolean, true if ok, false else
- */
-ParamGui.checkParamsProperty = function(theParams, theProperty) {
-    let result = true;
-    if (!(guiUtils.isObject(theParams) || (guiUtils.isArray(theParams)))) {
-        console.error("datGui-style: the parameter argument is not an object or an array: ");
-        console.log('its value is ' + theParams + ' of type "' + (typeof theParams) + '"');
-        console.log("the property argument is: " + theProperty);
-        result = false;
-    }
-    if (!(guiUtils.isString(theProperty) || (guiUtils.isNumber(theProperty)))) {
-        console.error("datGui-style: the property argument is not a string or a number: ");
-        console.log('its value is ' + theProperty + ' of type "' + (typeof theProperty) + '"');
-        result = false;
-    }
-    return result;
-};
-
 /** 
  * transform from datGui style arguments to the new args object
  * @method ParamGui.createArgs
@@ -781,11 +782,27 @@ ParamGui.checkParamsProperty = function(theParams, theProperty) {
  * @param {float/integer/array} low - determines lower limit/choices (optional)
  * @param {float/integer} high - determines upper limit (optional)
  * @param {float/integer} step - determines step size (optional)
- * @return object
+ * @return args object if parameters are ok, else false
  */
 ParamGui.createArgs = function(theParams, theProperty, low, high, step) {
+    // test datGui style parameters: message if fail and return false
+    // special case theParams===false: no error message
+    if (theParams === false) {
+        return false;
+    }
+    if (!(guiUtils.isObject(theParams) || (guiUtils.isArray(theParams)))) {
+        console.error("add controller: the parameter argument is not an object or an array: ");
+        console.log('its value is ' + theParams + ' of type "' + (typeof theParams) + '"');
+        console.log("the property argument is: " + theProperty);
+        return false;
+    }
+    if (!(guiUtils.isString(theProperty) || (guiUtils.isNumber(theProperty)))) {
+        console.error("add controller: the property argument is not a string or a number: ");
+        console.log('its value is ' + theProperty + ' of type "' + (typeof theProperty) + '"');
+        return false;
+    }
     if (ParamGui.logConversion) {
-        console.log("Add: Generating an argument object from datGui-style parameters");
+        console.log("Generating an argument object from datGui-style parameters");
     }
     const args = {
         params: theParams,
@@ -827,17 +844,12 @@ ParamGui.createArgs = function(theParams, theProperty, low, high, step) {
             args.max = high;
         }
         if (guiUtils.isNumber(step)) {
-            args.stepSize = step;
+            args.step = step;
         }
     } else {
-        // no idea/error
-        args.type = "noType";
-        console.error("Add controller: no fitting controller type found for datGui API parameters");
-        if (guiUtils.isDefined(low)) {
-            console.log('property "' + theProperty + '" with parameter value ' + paramValue + " and low " + low);
-        } else {
-            console.log('property "' + theProperty + '" with parameter value ' + paramValue);
-        }
+        console.error("no fitting controller type found for datGui API parameters");
+        console.log('property "' + theProperty + '" with parameter value ' + paramValue + " and low " + low);
+        return false;
     }
     if (ParamGui.logConversion) {
         console.log("property " + theProperty + " with value " + paramValue + ' of type "' + (typeof paramValue) + '"');
@@ -845,6 +857,50 @@ ParamGui.createArgs = function(theParams, theProperty, low, high, step) {
         console.log(args);
     }
     return args;
+};
+
+/**
+ * combine several argument objects into a new object, returns the object
+ * the objects that will be combined from the left to the right, adding and overwriting fields
+ * NOTE: the argument is typicall the arguments object of the caller, containing objects
+ * returns false if there is no argument or if an argument is not an object
+ * @method ParamGui.combineObject
+ * @param {Array-like Object of Objects} obs
+ * @return {object} the combination is a new object (not a deep clone)
+ */
+ParamGui.combineObject = function(obs) {
+    var i;
+    const length = obs.length;
+    if (length === 0) {
+        return false;
+    }
+    for (i = 0; i < length; i++) {
+        if (!guiUtils.isObject(obs[i])) {
+            return false;
+        }
+    }
+    let result = {};
+    for (i = 0; i < length; i++) {
+        Object.assign(result, obs[i]);
+    }
+    if (guiUtils.isObject(result) && ParamGui.logConversion && (obs.length > 1)) {
+        console.log("parameter object resulting from combination of args objects:");
+        console.log(result);
+    }
+    // check if all args fields are good parameters
+    if (guiUtils.isObject(result)) {
+        for (var key in result) {
+            if (goodArgsKeys.indexOf(key) < 0) {
+                console.error('arguments object has unknown parameter "' + key + '" with value "' + result[key] + '"');
+                let mess = "good parameters are: ";
+                for (i = 0; i < goodArgsKeys.length; i++) {
+                    mess += goodArgsKeys[i] + ", ";
+                }
+                console.log(mess.substring(0, mess.length - 2));
+            }
+        }
+    }
+    return result;
 };
 
 /**
@@ -858,7 +914,7 @@ ParamGui.createArgs = function(theParams, theProperty, low, high, step) {
  * YOU should update any objects that uses the data of controllers after setting up the gui.
  * @method ParamGui#add
  * @param {Object} theParams - object that has the parameter as a field, or an object with all information for the controller, or false for error
- * @param {String} theProperty - key for the field of params to change, params[property]
+ * @param {String|integer|object} theProperty - key for the field of params to change, params[property], or an object with additional information for the controller
  * @param {float/integer/array} low - determines lower limit/choices (optional)
  * @param {float/integer} high - determines upper limit (optional)
  * @param {float/integer} step - determines step size (optional)
@@ -881,7 +937,8 @@ ParamGui.createArgs = function(theParams, theProperty, low, high, step) {
 
 /* new arguments object
  *------------------------------------------------------------
- * args.type - values are strings: "number", "text", "button", "boolean", "selection", "color" or "image", (mandatory), defines type of controller
+ * use with gui.add(args) or gui.add(args,modifier)
+ * args.type - values are strings: "number", "text", "textarea", "button", "boolean", "selection", "color" or "image", (mandatory), defines type of controller
  * args.params - an object, the controller controls its args.property field (optional)
  * args.property - string, identifier of the parameter (mandatory if there is a args.params object)
  * args.initialValue - initial value for the parameter (optional, else args.params[args.property] or 0)
@@ -896,8 +953,32 @@ ParamGui.createArgs = function(theParams, theProperty, low, high, step) {
  * args.options - array or object, only for SELECTION or IMAGE type controllers
  * args.min - minimum value for NUMBER controllers (optional, default is 0)
  * args.max - maximum value for NUMBER controllers (optional, default is a large number)
- * args.stepSize - value for step of NUMBER controllers (optional, default is obtained from the initial value)
+ * args.step - value for step of NUMBER controllers (optional, default is obtained from the initial value)
+ * args.colorObject - an object with red, blue, green number fields and alpha (if there is transparency) for color controller, if undef/false use hex color string
+ * args.rows - number of rows (horizontal lines) for a textarea
+ * args.columns - number of columns (chars per line) for a textarea
  */
+
+let goodArgsKeys = ["type",
+    "params",
+    "property",
+    "initialValue",
+    "listening",
+    "usePopup",
+    "labelText",
+    "buttonText",
+    "onChange",
+    "onClick",
+    "minLabelWidth",
+    "minElementWidth",
+    "options",
+    "min",
+    "max",
+    "step",
+    "colorObject",
+    "rows",
+    "columns"
+];
 
 /* find details about controllers depending on controller type
  *---------------------------------------------------
@@ -917,57 +998,62 @@ ParamGui.createArgs = function(theParams, theProperty, low, high, step) {
  *                    object.icon is an image file path string (URL) or an image data url. Illustrates the choice
  *                    object.value is what gets selected, an image file path string for an input image file, or a file path to *.json file
  * type="text" - see textInput.js
- * type="color" - see colorInput.js, values is a string of type "#rrggbb" (opaque) or "#rrggbbaa" (with transparency)
+ * type="color" - see colorInput.js, value is a string of type "#rrggbb" (opaque) or "#rrggbbaa" (with transparency)
+ * type="textarea" - see textAreaInOut.js
  */
+
+/*
+ * you can use more than one parameter object
+ * they will be composed, going from left to right
+ * adding fieelds or overwriting values of fields
+ */
+
 ParamGui.prototype.add = function(theParams, theProperty, low, high, step) {
-    let args = false;
-    if (arguments.length === 1) {
-        args = theParams;
-    } else if (ParamGui.checkParamsProperty(theParams, theProperty)) {
+    // analyze parameters, make an arguments object or return with error message
+    // new style - if arguments are all objects, combine them together
+    var args = ParamGui.combineObject(arguments);
+    if (!guiUtils.isObject(args)) {
+        // didn't do, see if we have datgui style parameters
         args = ParamGui.createArgs(theParams, theProperty, low, high, step);
     }
-    let controller = false;
-    if (args) {
-        const controllerDomElement = document.createElement("div");
-        // make a regular spacing between elements
-        controllerDomElement.style.paddingTop = this.design.paddingVertical + "px";
-        controllerDomElement.style.paddingBottom = this.design.paddingVertical + "px";
-        controller = new ParamController(this, controllerDomElement, args);
-        this.bodyDiv.appendChild(controllerDomElement);
-    } else {
+    if (!guiUtils.isObject(args)) {
         const message = document.createElement("div");
-        message.innerHTML = "&nbsp DatGui-style parameters are not ok";
-        console.error("no controller generated because DatGui-style parameters are not ok");
+        message.innerHTML = "&nbsp parameters are not ok";
+        console.error("no controller generated because parameters are not ok");
         this.bodyDiv.appendChild(message);
+        return false;
     }
+    const controllerDomElement = document.createElement("div");
+    // make a regular spacing between elements
+    controllerDomElement.style.paddingTop = this.design.paddingVertical + "px";
+    controllerDomElement.style.paddingBottom = this.design.paddingVertical + "px";
+    const controller = new ParamController(this, controllerDomElement, args);
+    this.bodyDiv.appendChild(controllerDomElement);
     return controller;
 };
 
 /**
- * make a controller for color, datGui.js style parameters
+ * make a controller for color, datGui.js style parameters or new style
+ * uses the add method to create the controller
  * @method ParamGui#addColor
  * @param {Object} theParams - object that has the parameter as a field, or argument object that has all data
  * @param {String} theProperty - key for the field of params to change, theParams[theProperty]
  * @return {ParamController} object
  */
 ParamGui.prototype.addColor = function(theParams, theProperty) {
-    let args = false;
-    if (arguments.length === 1) {
-        args = theParams; // the new version
-    } else if (ParamGui.checkParamsProperty(theParams, theProperty)) {
-        args = {
-            params: theParams,
-            property: theProperty,
-            type: "color"
-        };
-        if (ParamGui.logConversion) {
-            console.log("Paramgui#addColor: generating an argument object from datGui-style parameters");
-            console.log('property "' + theProperty + '" with value ' + theParams[theProperty] + ", generated parameter object:");
-            console.log(args);
+    var args = ParamGui.combineObject(arguments);
+    if (!guiUtils.isObject(args)) {
+        // didn't do, see if we have datgui style parameters
+        args = ParamGui.createArgs(theParams, theProperty);
+        if (ParamGui.logConversion && guiUtils.isObject(args)) {
+            console.log('addColor - changes type: "color"');
         }
     }
-    let controller = this.add(args);
-    return controller;
+    if (guiUtils.isObject(args)) {
+        args.type = "color"; // make shure we get color
+    }
+    args.type = "color";
+    return this.add(args);
 };
 
 /**
@@ -1137,124 +1223,4 @@ ParamGui.prototype.closePopup = function() {
             element.closePopup();
         }
     });
-};
-
-// output elements
-//  create a div container for output elements (canvas)
-//==============================================================
-
-/**
- * get the limit for free space at the left
- * taking into account all guis at the left side
- * @method ParamGui#leftSpaceLimit
- * @return number, for the left offset of a fitting container
- */
-ParamGui.leftSpaceLimit = function() {
-    let spaceLimit = 0;
-    ParamGui.rootGuis.forEach(gui => {
-        if (gui.design.horizontalPosition === "left") {
-            spaceLimit = Math.max(gui.design.horizontalShift + gui.design.width + 2 * gui.design.borderWidth, spaceLimit);
-        }
-    });
-    return spaceLimit;
-};
-
-/**
- * get the limit for free space at the right
- * taking into account all guis at the right hand side
- * @method ParamGui#rightSpaceLimit
- * @return number, the width of fitting container is difference between right and left limit
- */
-ParamGui.rightSpaceLimit = function() {
-    let space = 0;
-    ParamGui.rootGuis.forEach(gui => {
-        if (gui.design.horizontalPosition === "right") {
-            space = Math.max(gui.design.horizontalShift + gui.design.width + 2 * gui.design.borderWidth, space);
-        }
-    });
-    // with window.innerWidth we do not get some ghosts of scroll bars
-    // document.documentElement.clientWidth upon reducing screen height gives a smaller width because of spurious vertical scroll bar
-    //  const spaceLimit = window.innerWidth - space;
-    const spaceLimit = document.documentElement.clientWidth - space;
-    return spaceLimit;
-};
-
-ParamGui.outputDiv = false;
-
-/**
- * resizing the content of the output div
- * does nothing here, overwrite depending on content
- * output div will have its final dimension when calling this
- * so you can use its clientWidth/Height
- * @method ParamGui.resizeOutputContent
- */
-ParamGui.resizeOutputContent = function() {};
-
-/**
- * resizing the output div and setting its scrolling
- * sets width and height of the output div
- * calls resize function for contents
- * determines size of content
- * then activates scroll bars
- * @method ParamGui.resizeOutputDiv
- */
-ParamGui.resizeOutputDiv = function() {
-    const leftOfSpace = ParamGui.leftSpaceLimit();
-    const widthOfSpace = ParamGui.rightSpaceLimit() - leftOfSpace;
-    ParamGui.outputDiv.style.left = leftOfSpace + "px";
-    // resize content: set up final dimensions of the div
-    // you can use them to resize content
-    // overflow hidden makes that scroll bars do not reduce client width or height
-    ParamGui.outputDiv.style.width = widthOfSpace + "px";
-    ParamGui.outputDiv.style.height = window.innerHeight + "px"; // no scroll bars !
-    ParamGui.outputDiv.style.overflow = "hidden";
-    // now resize content
-    ParamGui.resizeOutputContent();
-    // get size of contents
-    // no height and width given => shrink wrap
-    ParamGui.outputDiv.style.height = "";
-    ParamGui.outputDiv.style.width = "";
-    // now we can get size of content with clientWidth/Height
-    const widthOfContent = ParamGui.outputDiv.clientWidth;
-    const heightOfContent = ParamGui.outputDiv.clientHeight;
-    // again set final dimensions
-    ParamGui.outputDiv.style.width = widthOfSpace + "px";
-    ParamGui.outputDiv.style.height = window.innerHeight + "px";
-    // see if content is too wide and horizontal scroll bars are required
-    if (widthOfContent > ParamGui.outputDiv.clientWidth) {
-        ParamGui.outputDiv.style.overflowX = "scroll";
-    }
-    // see if content is too high (including a possible scroll bar)
-    if (heightOfContent > ParamGui.outputDiv.clientHeight) {
-        ParamGui.outputDiv.style.overflowY = "scroll";
-        // the clientwidth has been reduced, and we may need a herizontal scroll bar now
-        if (widthOfContent > ParamGui.outputDiv.clientWidth) {
-            ParamGui.outputDiv.style.overflowX = "scroll";
-        }
-    }
-};
-
-/**
- * create an output div fitting the guis
- * it will be in ParamGui.outputDiv
- * it will fit between the guis at the left and those at the right
- * you can have more than one canvas in the output div ...
- * @method ParamGui.createOutputDiv
- * @return the output div
- */
-ParamGui.createOutputDiv = function() {
-    if (ParamGui.outputDiv) {
-        console.error("ParamGui.outputDiv exists already!");
-    } else {
-        ParamGui.outputDiv = document.createElement("div");
-        ParamGui.outputDiv.style.position = "absolute";
-        ParamGui.outputDiv.style.top = "0px";
-
-        ParamGui.outputDiv.style.backgroundColor = "blue";
-
-        ParamGui.resizeOutputDiv();
-        document.body.appendChild(ParamGui.outputDiv);
-        window.addEventListener("resize", ParamGui.resizeOutputDiv, false);
-    }
-    return ParamGui.outputDiv;
 };

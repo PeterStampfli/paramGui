@@ -1,3 +1,4 @@
+/* jshint esversion: 6 */
 import {
     guiUtils,
     BooleanButton,
@@ -6,14 +7,12 @@ import {
     TextInput,
     ColorInput,
     ImageSelect,
+    TextAreaInOut,
     Popup,
     NumberButton,
     ParamGui,
     InstantHelp
 } from "./modules.js";
-
-// note: a line with several ui elements is similar to a folder
-// it has its own design style with design.popupForNumberController=true
 
 /**
  * a controller for a simple parameter
@@ -36,10 +35,11 @@ export function ParamController(gui, domElement, args) {
     // put controller in list of elements (for destruction, popup controll,...)
     gui.elements.push(this);
     this.type = args.type;
+    this.useRGBFields = args.useRGBFields;
     // see if the args object has a parameter value
     this.hasParameter = false;
     var parameterValue;
-    // test if the args.property is ok, then we can have a parameter value
+    // test if the args.property is defined, then we need an args.params object or array
     if (guiUtils.isDefined(args.property)) {
         if (guiUtils.isString(args.property) || guiUtils.isNumber(args.property)) {
             this.property = args.property;
@@ -49,41 +49,54 @@ export function ParamController(gui, domElement, args) {
                 parameterValue = args.params[args.property]; // this may be undefined, no problem, gets value later
                 this.hasParameter = true;
             } else {
-                console.error("ParamController: argument.params is not an object although there is an argument.property.");
+                console.error("add controller: params is not an object or array although there is a property.");
                 console.log("its value is " + args.params + " of type " + (typeof args.params));
                 console.log("the arguments object:");
                 console.log(args);
             }
         } else {
-            console.error("ParamController: argument.property is not a string.");
+            console.error("add Controller: property is not a string.");
             console.log("its value is " + args.property + " of type " + (typeof args.property));
             console.log("the arguments object:");
             console.log(args);
         }
+    } else if (guiUtils.isDefined(args.params)) {
+        console.error("add Controller: property is not defined although there is a params object or array.");
+        console.log("the arguments object:");
+        console.log(args);
     }
 
     /**
-     * callback for changes
+     * default callback for changes
      * @method ParamController#callback
      * @param {anything} value
      */
     this.callback = function(value) {
-        console.log("callback value " + value);
+        // console.log("callback value " + value);
     };
 
-    // get callback from different arguments. For a button it might be the (initial) parameter value
-    // get label text, button is special: the property might be the button text but not the label text
-    var labelText, buttonText;
+    // get callback from different arguments. For a button it might be the (initial) parameter value. A button never has a parameter.
     if (args.type === "button") {
         this.callback = guiUtils.check(args.onChange, args.onClick, parameterValue, this.callback);
         this.hasParameter = false;
+    } else if (args.type !== "textarea") { // textarea has no onChange event, thus no callback
+        this.callback = guiUtils.check(args.onChange, args.onClick, this.callback);
+    }
+    // get label text, button is special: the property might be the button text but not the label text
+    var labelText, buttonText;
+    if (args.type === "button") {
         labelText = guiUtils.check(args.labelText, "");
         buttonText = guiUtils.check(args.buttonText, args.property, "missing text");
     } else {
-        this.callback = guiUtils.check(args.onChange, args.onClick, this.callback);
-        // get initial value from args or from parameter value
-        this.initialValue = guiUtils.check(args.initialValue, parameterValue);
         labelText = guiUtils.check(args.labelText, args.property, "");
+    }
+    // get initial value, not for button. special for color controller with color object
+    if ((args.type === "color") && guiUtils.isObject(args.colorObject)) {
+        this.hasParameter = false; // for safety, in case there is some property value (that should not be)
+        this.colorObject = args.colorObject;
+        this.initialValue = guiUtils.check(args.initialValue, ColorInput.stringFromObject(args.colorObject));
+    } else if (args.type !== "button") {
+        this.initialValue = guiUtils.check(args.initialValue, parameterValue);
     }
     // activate listening if we have a parameter and args.listening is true
     this.listening = this.hasParameter && guiUtils.check(args.listening);
@@ -109,6 +122,9 @@ export function ParamController(gui, domElement, args) {
     this.domElement.appendChild(this.label);
     this.label.textContent = labelText;
 
+    // call if there is no good initial value, makes messages
+    // parameter 'details' gives more information about the error (type of initial value)
+    // set initial value to default value of the ui element
     function noGoodInitialValue(details) {
         const message = document.createElement("span");
         message.innerHTML = "&nbsp " + details;
@@ -142,7 +158,7 @@ export function ParamController(gui, domElement, args) {
                         this.setValueOnly(selectValues.getValue());
                         noGoodInitialValue("initial value is not in options");
                     }
-                } else {
+                } else if (guiUtils.isDefined(args.options)) {
                     const message = document.createElement("span");
                     message.innerHTML = "&nbsp selection: options is not an array or object";
                     this.domElement.appendChild(message);
@@ -182,6 +198,32 @@ export function ParamController(gui, domElement, args) {
                 this.getValue = function() {};
                 this.updateDisplay = function() {};
                 break;
+            case "textarea":
+                this.label.style.verticalAlign = "middle";
+                const textarea = new TextAreaInOut(this.domElement);
+                textarea.setFontSize(this.design.buttonFontSize);
+                textarea.element.style.display = "inline-block";
+                textarea.element.style.verticalAlign = "middle";
+                guiUtils.hSpace(this.domElement, ParamGui.spaceWidth);
+                this.uiElement = textarea;
+                this.setValue = this.setValueOnly;
+                this.setupOnInteraction();
+                const rows = guiUtils.check(args.rows, 3);
+                textarea.setRows(rows);
+                const columns = guiUtils.check(args.columns, 20);
+                textarea.setColumns(columns);
+                if (guiUtils.isString(this.initialValue)) {
+                    this.setValueOnly(this.initialValue); // safe, does not change value
+                } else {
+                    // fallback: convert initial value to string
+                    if (guiUtils.isDefined(this.initialValue)) {
+                        this.setValueOnly(this.initialValue.toString());
+                    } else {
+                        this.setValueOnly("undefined");
+                    }
+                    noGoodInitialValue("initial value is not a string");
+                }
+                break;
             case "text":
                 const textInput = new TextInput(this.domElement);
                 this.uiElement = textInput;
@@ -194,7 +236,11 @@ export function ParamController(gui, domElement, args) {
                     this.setValueOnly(this.initialValue); // safe, does not change value
                 } else {
                     // fallback: convert initial value to string
-                    this.setValueOnly(this.initialValue.toString());
+                    if (guiUtils.isDefined(this.initialValue)) {
+                        this.setValueOnly(this.initialValue.toString());
+                    } else {
+                        this.setValueOnly("undefined");
+                    }
                     noGoodInitialValue("initial value is not a string");
                 }
                 break;
@@ -209,13 +255,13 @@ export function ParamController(gui, domElement, args) {
                 guiUtils.hSpace(this.domElement, ParamGui.spaceWidth);
                 // set limits and step
                 if (guiUtils.isNumber(args.min)) {
-                    numberButton.setLow(args.min);
+                    numberButton.setMin(args.min);
                 }
                 if (guiUtils.isNumber(args.max)) {
-                    numberButton.setHigh(args.max);
+                    numberButton.setMax(args.max);
                 }
-                if (guiUtils.isNumber(args.stepSize)) {
-                    numberButton.setStep(args.stepSize);
+                if (guiUtils.isNumber(args.step)) {
+                    numberButton.setStep(args.step);
                 } else {
                     numberButton.setStep(NumberButton.findStep(this.initialValue));
                 }
@@ -242,8 +288,8 @@ export function ParamController(gui, domElement, args) {
                 if (guiUtils.isColorString(this.initialValue)) {
                     this.setValueOnly(this.initialValue);
                 } else {
-                    // fallback: opaque black
-                    this.setValueOnly("#000000");
+                    // fallback: opaque blue
+                    this.setValueOnly("#0000ff");
                     noGoodInitialValue("initial value is not a color string");
                 }
                 break;
@@ -403,6 +449,8 @@ ParamController.prototype.setupOnChange = function() {
         const value = element.getValue();
         if (controller.hasParameter) {
             controller.params[controller.property] = value;
+        } else if ((controller.type === "color") && (controller.colorObject)) {
+            ColorInput.setObject(controller.colorObject, value);
         }
         controller.callback(value);
     };
@@ -410,6 +458,7 @@ ParamController.prototype.setupOnChange = function() {
 
 /**
  * add another controller to the domElement of this controller
+ * sets minimum width of label to zero, for minimal distances
  * details: see ParamGui#add
  * @method ParamController#add
  * @param {Object} theParams - object that has the parameter as a field, or an object with all information for the controller
@@ -419,21 +468,20 @@ ParamController.prototype.setupOnChange = function() {
  * @param {float/integer} step - determines step size (optional)
  */
 ParamController.prototype.add = function(theParams, theProperty, low, high, step) {
-    let args = false;
-    if (arguments.length === 1) {
-        args = theParams;
-    } else if (ParamGui.checkParamsProperty(theParams, theProperty)) {
+    var args = ParamGui.combineObject(arguments);
+    if (!guiUtils.isObject(args)) {
+        // didn't do, see if we have datgui style parameters
         args = ParamGui.createArgs(theParams, theProperty, low, high, step);
     }
-    let controller = false;
-    if (args) {
-        controller = new ParamController(this.gui, this.domElement, args);
-    } else {
+    if (!guiUtils.isObject(args)) {
         const message = document.createElement("span");
-        message.innerHTML = "&nbsp DatGui-style parameters are not ok";
-        console.error("no controller generated because DatGui-style parameters are not ok");
+        message.innerHTML = "&nbsp parameters are not ok";
+        console.error("no controller generated because parameters are not ok");
         this.domElement.appendChild(message);
+        return false;
     }
+    const controller = new ParamController(this.gui, this.domElement, args);
+    controller.setMinLabelWidth(0);
     return controller;
 };
 
@@ -444,23 +492,7 @@ ParamController.prototype.add = function(theParams, theProperty, low, high, step
  * @param {String} theProperty - key for the field of params to change, theParams[theProperty]
  * @return {ParamController} object
  */
-ParamController.prototype.addColor = function(theParams, theProperty) {
-    let args = false;
-    if (arguments.length === 1) {
-        args = theParams; // the new version
-    } else if (ParamGui.checkParamsProperty(theParams, theProperty)) {
-        console.log("ParamController#addColor: generating an argument object from datGui-style parameters");
-        args = {
-            params: theParams,
-            property: theProperty,
-            type: "color"
-        };
-        console.log('property "' + theProperty + '" with value ' + theParams[theProperty] + ", generated parameter object:");
-        console.log(args);
-    }
-    let controller = this.add(args);
-    return controller;
-};
+ParamController.prototype.addColor = ParamGui.prototype.addColor;
 
 /**
  * add a help alert
@@ -474,12 +506,33 @@ ParamController.prototype.addHelp = function(message) {
     return this;
 };
 
-// setting and getting values. Be careful if a params object exists
+/**
+ * add an option to a selection controller
+ * @method ParamController#addOption
+ * @param {String|number} name
+ * @param {whatever} value - optional, default value is name
+ */
+
+ParamController.prototype.addOption = function(name, value = name) {
+    if (this.type === "selection") {
+        this.uiElement.addOption(name, value);
+        // to be safe: adding an option to an empty selecction -> choose this option
+        if (this.uiElement.values.length === 1) {
+            this.setValueOnly(value);
+        }
+    } else {
+        console.error('ParamController#addOption: Only for controllers of type "selection"');
+        console.log('this controller type is "' + this.type + '"');
+    }
+
+};
+
+// setting and getting values. 
 //===========================================
 // Two different values, of the ui and the object.
 // they have to be synchronized
 // different values: use the ui value, change the object value
-// if the value of the param object changes, then update the object via callback
+// if the value of the param object changes, then update the ui with updateDisplay
 
 /**
  * updates display and set the value of the param object field if it exists
@@ -488,13 +541,15 @@ ParamController.prototype.addHelp = function(message) {
  * (for multiple parameter changes, use callback only at last change)
  * (Note that this.setValue() is not the same as this.uiElement.setValue())
  * @method ParamController#setValue
- * @param {whatever} value
+ * @param {whatever} value - goes to the controller uiElement setValue method
  */
 ParamController.prototype.setValueOnly = function(value) {
     if (this.uiElement) {
         this.uiElement.setValue(value);
         if (this.hasParameter) {
             this.params[this.property] = this.uiElement.getValue();
+        } else if ((this.type === "color") && guiUtils.isObject(this.colorObject)) {
+            ColorInput.setObject(this.colorObject, this.uiElement.getValue());
         }
     } else {
         console.error('Controller.setValueOnly: There is no ui element because of unknown controller type "' + this.type + '".');
@@ -521,22 +576,15 @@ ParamController.prototype.setValue = function(value) {
 
 /**
  * get the value of the controller
- * (should be the same as the value for the param object)
- * if there is a parameter, then its value is relevant, controller value will be updated if it is different
+ * does not check if it is the same as the property value of the params object
+ * sets the fields of a colorObject if there is one and it is a color controller
  * @method ParamController#getValue
+ * @param {object} obj - optional object with red, green, blue (and alpha) fields
  * @return {whatever} value
  */
-ParamController.prototype.getValue = function() {
+ParamController.prototype.getValue = function(obj) {
     if (this.uiElement) {
-        let value = this.uiElement.getValue();
-        if (this.hasParameter) {
-            const parameterValue = this.params[this.property];
-            if (value !== parameterValue) {
-                value = parameterValue;
-                this.uiElement.setValue(parameterValue);
-            }
-            return value;
-        }
+        return this.uiElement.getValue(obj);
     } else {
         console.error('Controller.getValue: There is no ui element because of unknown controller type "' + this.type + '".');
     }
@@ -544,6 +592,7 @@ ParamController.prototype.getValue = function() {
 
 /**
  * set the value of the display (controller) according to the actual value of the parameter in the params object
+ * or color object
  * if params exist, else do nothing
  * does not call the callback
  * @method ParamController#updateDisplay
@@ -551,8 +600,9 @@ ParamController.prototype.getValue = function() {
 ParamController.prototype.updateDisplay = function() {
     if (this.uiElement) {
         if (this.hasParameter) {
-            const value = this.params[this.property];
-            this.uiElement.setValue(value);
+            this.uiElement.setValue(this.params[this.property]);
+        } else if (guiUtils.isObject(this.colorObject)) {
+            this.uiElement.setValue(ColorInput.stringFromObject(this.colorObject));
         }
     } else {
         console.error('Controller.updateDisplay: There is no ui element because of unknown controller type "' + this.type + '".');
@@ -603,6 +653,20 @@ ParamController.prototype.hide = function() {
  */
 ParamController.prototype.show = function() {
     this.domElement.style.display = "block";
+    return this;
+};
+
+/**
+ * set if controller is active (or read only)
+ * @method ParamController#setActive
+ * @param {boolean} isActive
+ */
+ParamController.prototype.setActive = function(isActive) {
+    if (this.uiElement) {
+        this.uiElement.setActive(isActive);
+    } else {
+        console.error('Controller.setActive: There is no ui element because of unknown controller type "' + this.type + '".');
+    }
     return this;
 };
 
@@ -767,6 +831,36 @@ ParamController.prototype.setMinElementWidth = function(width) {
 // for the number controller
 //===================================================
 
+/**
+ * set a new minimum value for the number range
+ * @method ParamController#setMin
+ * @param {number} value
+ * @return this controller
+ */
+ParamController.prototype.setMin = function(value) {
+    if (this.type === "number") {
+        this.uiElement.setMin(value);
+    } else {
+        console.error('ParamController.setMin: Only for "number" controllers. Type of this controller: "' + this.type + '"');
+    }
+    return this;
+};
+
+/**
+ * set a new maximum value for the number range
+ * @method ParamController#setMax
+ * @param {number} value
+ * @return this controller
+ */
+ParamController.prototype.setMax = function(value) {
+    if (this.type === "number") {
+        this.uiElement.setMax(value);
+    } else {
+        console.error('ParamController.setMax: Only for "number" controllers. Type of this controller: "' + this.type + '"');
+    }
+    return this;
+};
+
 // special parameters for these popups, not specified in paramGui
 ParamController.popupDesign = {
     popupBorderRadius: 0,
@@ -811,6 +905,8 @@ ParamController.prototype.createAddButton = function(text, amount) {
         this.setupButtonContainer();
         this.uiElement.createAddButton(text, this.buttonContainer, amount);
         guiUtils.hSpace(this.buttonContainer, NumberButton.spaceWidth);
+    } else {
+        console.error('ParamController.createAddButton: Only for "number" controllers. Type of this controller: "' + this.type + '"');
     }
     return this;
 };
@@ -839,6 +935,8 @@ ParamController.prototype.createMulButton = function(text, amount) {
         this.setupButtonContainer();
         this.uiElement.createMulButton(text, this.buttonContainer, amount);
         guiUtils.hSpace(this.buttonContainer, NumberButton.spaceWidth);
+    } else {
+        console.error('ParamController.createMulButton: Only for "number" controllers. Type of this controller: "' + this.type + '"');
     }
     return this;
 };
@@ -865,6 +963,8 @@ ParamController.prototype.createMiniButton = function() {
         this.setupButtonContainer();
         this.uiElement.createMiniButton(this.buttonContainer);
         guiUtils.hSpace(this.buttonContainer, NumberButton.spaceWidth);
+    } else {
+        console.error('ParamController.createMiniButton: Only for "number" controllers. Type of this controller: "' + this.type + '"');
     }
     return this;
 };
@@ -879,6 +979,8 @@ ParamController.prototype.createMaxiButton = function() {
         this.setupButtonContainer();
         this.uiElement.createMaxiButton(this.buttonContainer);
         guiUtils.hSpace(this.buttonContainer, NumberButton.spaceWidth);
+    } else {
+        console.error('ParamController.createMaxiButton: Only for "number" controllers. Type of this controller: "' + this.type + '"');
     }
     return this;
 };
@@ -904,6 +1006,8 @@ ParamController.prototype.createLeftButton = function() {
         this.setupButtonContainer();
         this.uiElement.createLeftButton(this.buttonContainer);
         guiUtils.hSpace(this.buttonContainer, NumberButton.spaceWidth);
+    } else {
+        console.error('ParamController.createLeftButton: Only for "number" controllers. Type of this controller: "' + this.type + '"');
     }
     return this;
 };
@@ -918,6 +1022,8 @@ ParamController.prototype.createRightButton = function() {
         this.setupButtonContainer();
         this.uiElement.createRightButton(this.buttonContainer);
         guiUtils.hSpace(this.buttonContainer, NumberButton.spaceWidth);
+    } else {
+        console.error('ParamController.createRightButton: Only for "number" controllers. Type of this controller: "' + this.type + '"');
     }
     return this;
 };
@@ -932,6 +1038,8 @@ ParamController.prototype.createDecButton = function() {
         this.setupButtonContainer();
         this.uiElement.createDecButton(this.buttonContainer);
         guiUtils.hSpace(this.buttonContainer, NumberButton.spaceWidth);
+    } else {
+        console.error('ParamController.createDecButton: Only for "number" controllers. Type of this controller: "' + this.type + '"');
     }
     return this;
 };
@@ -946,6 +1054,8 @@ ParamController.prototype.createIncButton = function() {
         this.setupButtonContainer();
         this.uiElement.createIncButton(this.buttonContainer);
         guiUtils.hSpace(this.buttonContainer, NumberButton.spaceWidth);
+    } else {
+        console.error('ParamController.createIncButton: Only for "number" controllers. Type of this controller: "' + this.type + '"');
     }
     return this;
 };
@@ -974,6 +1084,8 @@ ParamController.prototype.createSuggestButton = function(value) {
         this.setupButtonContainer();
         this.uiElement.createSuggestButton(this.buttonContainer, value);
         guiUtils.hSpace(this.buttonContainer, NumberButton.spaceWidth);
+    } else {
+        console.error('ParamController.createSuggestButton: Only for "number" controllers. Type of this controller: "' + this.type + '"');
     }
     return this;
 };
@@ -989,6 +1101,8 @@ ParamController.prototype.createSmallRange = function() {
         this.uiElement.createRange(this.buttonContainer);
         this.uiElement.setRangeWidth(this.design.rangeSliderLengthShort);
         guiUtils.hSpace(this.buttonContainer, NumberButton.spaceWidth);
+    } else {
+        console.error('ParamController.createSmallRange: Only for "number" controllers. Type of this controller: "' + this.type + '"');
     }
     return this;
 };
@@ -1002,6 +1116,8 @@ ParamController.prototype.createLongRange = function() {
     if (this.type === "number") {
         this.createSmallRange();
         this.uiElement.setRangeWidth(this.design.rangeSliderLengthLong);
+    } else {
+        console.error('ParamController.createLongRange: Only for "number" controllers. Type of this controller: "' + this.type + '"');
     }
     return this;
 };
@@ -1015,6 +1131,8 @@ ParamController.prototype.createVeryLongRange = function() {
     if (this.type === "number") {
         this.createSmallRange();
         this.uiElement.setRangeWidth(this.design.rangeSliderLengthVeryLong);
+    } else {
+        console.error('ParamController.createVeryLongRange: Only for "number" controllers. Type of this controller: "' + this.type + '"');
     }
     return this;
 };
@@ -1027,6 +1145,8 @@ ParamController.prototype.createVeryLongRange = function() {
 ParamController.prototype.cyclic = function() {
     if (this.type === "number") {
         this.uiElement.setCyclic();
+    } else {
+        console.error('ParamController.cyclic: Only for "number" controllers. Type of this controller: "' + this.type + '"');
     }
     return this;
 };
@@ -1039,6 +1159,8 @@ ParamController.prototype.createIndicatorMain = function() {
     if (this.type === "number") {
         this.uiElement.setIndicatorColors(this.design.indicatorColorLeft, this.design.indicatorColorRight);
         this.uiElement.setIndicatorElement(this.domElement);
+    } else {
+        console.error('ParamController.createIndicatorMain: Only for "number" controllers. Type of this controller: "' + this.type + '"');
     }
     return this;
 };
@@ -1052,6 +1174,8 @@ ParamController.prototype.createIndicator = function() {
         this.setupButtonContainer();
         this.uiElement.setIndicatorColors(this.design.indicatorColorLeft, this.design.indicatorColorRight);
         this.uiElement.setIndicatorElement(this.buttonContainer);
+    } else {
+        console.error('ParamController.createIndicator: Only for "number" controllers. Type of this controller: "' + this.type + '"');
     }
     return this;
 };

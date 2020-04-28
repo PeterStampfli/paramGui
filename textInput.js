@@ -1,3 +1,5 @@
+/* jshint esversion: 6 */
+
 /**
  * a text input element
  * to simplify construction and destruction
@@ -6,18 +8,15 @@
  * @param {DOM element} parent, an html element, best "div"
  */
 
-/* jshint esversion:6 */
 import {
     Button,
     guiUtils
 } from "./modules.js";
 
-
 export function TextInput(parent) {
     this.element = document.createElement("input");
     parent.appendChild(this.element);
     this.element.setAttribute("type", "text");
-    this.element.style.cursor = "pointer";
 
     this.hover = false;
     this.pressed = false;
@@ -105,6 +104,26 @@ TextInput.prototype.setFontSize = function(size) {
  */
 TextInput.prototype.setWidth = function(width) {
     this.element.style.width = width + "px";
+};
+
+/**
+ * set if button is active
+ * @method TextInput#setActive
+ * @param {boolean} isActive
+ */
+TextInput.prototype.setActive = function(isActive) {
+    if (this.isActive !== isActive) {
+        this.active = isActive;
+        this.element.disabled = !isActive;
+        if (isActive) {
+            this.element.style.cursor = "text";
+        } else {
+            this.element.style.cursor = "default";
+            this.pressed = false;
+            this.hover = false;
+        }
+        this.updateStyle();
+    }
 };
 
 /**

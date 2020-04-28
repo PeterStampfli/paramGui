@@ -1,3 +1,5 @@
+/* jshint esversion: 6 */
+
 /**
  * representing an HTML selection for selecting values as selection name/value pairs
  * choices are either a simple array that determines names of selections and their values
@@ -55,6 +57,15 @@ SelectValues.prototype.setFontSize = function(size) {
 };
 
 /**
+ * set if button is active
+ * @method SelectValues#setActive
+ * @param {boolean} isActive
+ */
+SelectValues.prototype.setActive = function(isActive) {
+    this.select.setActive(isActive);
+};
+
+/**
  * clear all options, leaving empty select
  * @method SelectValues#clear
  */
@@ -68,9 +79,9 @@ SelectValues.prototype.clear = function() {
  * add an option with a name and a value
  * @method SelectValues#addOption
  * @param {String|number} name
- * @param {whatever} value
+ * @param {whatever} value - optional, default value is name
  */
-SelectValues.prototype.addOption = function(name, value) {
+SelectValues.prototype.addOption = function(name, value = name) {
     this.select.addOptions(name);
     this.names.push(name);
     this.values.push(value);
@@ -85,7 +96,7 @@ SelectValues.prototype.addOption = function(name, value) {
  */
 SelectValues.prototype.addOptions = function(options) {
     if (guiUtils.isArray(options)) {
-        options.forEach(option => this.addOption(option, option));
+        options.forEach(option => this.addOption(option));
     } else if (guiUtils.isObject(options)) {
         // an object defines selection values as value[key] pair, key is shown as name of a selection (option)
         const names = Object.keys(options);

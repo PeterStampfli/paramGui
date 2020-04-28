@@ -1,3 +1,5 @@
+/* jshint esversion: 6 */
+
 /**
  * a button to input numbers,
  *
@@ -24,7 +26,7 @@ export function NumberButton(parent) {
     this.addButtons = [];
     this.range = false;
     this.hover = false;
-    this.pressed = false;
+    this.pressed = false; // corresponds to focus
     this.active = true;
     // limiting the number range: defaults, minimum is zero, maximum is very large
     this.minValue = 0;
@@ -43,7 +45,7 @@ export function NumberButton(parent) {
     const button = this;
 
     /**
-     * action upon change, strategy pattern
+     * action upon change of the number
      * @method NumberButton#onchange
      * @param {integer} value
      */
@@ -59,18 +61,23 @@ export function NumberButton(parent) {
         console.log("numberInteraction");
     };
 
+    // if the text of the input element changes: read text as number and update everything
     this.input.onchange = function() {
-        button.updateValue(button.getValue());
+        button.updateValue(parseFloat(button.input.value));
     };
 
     this.input.onmousedown = function() {
-        button.onInteraction();
+        if (button.active) {
+            button.onInteraction();
+        }
     };
 
     // onfocus /onblur corresponds to pressed
     this.input.onfocus = function() {
-        button.pressed = true;
-        button.updateStyle();
+        if (button.active) {
+            button.pressed = true;
+            button.updateStyle();
+        }
     };
 
     this.input.onblur = function() {
@@ -80,19 +87,23 @@ export function NumberButton(parent) {
 
     // hovering
     this.input.onmouseenter = function() {
-        button.hover = true;
-        button.updateStyle();
+        if (button.active) {
+            button.hover = true;
+            button.updateStyle();
+        }
     };
 
     this.input.onmouseleave = function() {
-        button.hover = false;
-        button.updateStyle();
+        if (button.active) {
+            button.hover = false;
+            button.updateStyle();
+        }
     };
 
     this.input.onwheel = function(event) {
         event.preventDefault();
         event.stopPropagation();
-        if (button.pressed) {
+        if (button.pressed && button.active) {
             button.changeDigit(-event.deltaY);
         }
         return false;
@@ -100,7 +111,7 @@ export function NumberButton(parent) {
 
     this.input.onkeydown = function(event) {
         let key = event.key;
-        if (button.pressed) {
+        if (button.pressed && button.active) {
             if (key === "ArrowDown") {
                 button.changeDigit(-1);
                 event.preventDefault();
@@ -119,14 +130,58 @@ NumberButton.isNumberButton = function(thing) {
     return thing instanceof NumberButton;
 };
 
-// find step suitable to given value, with some margin, will be rounded down
+/**
+ * change/set precision of numbers
+ * we are using fixed point numbers
+ * NumberButton.eps(ilon)<1 defines the base precision, it is the smallest step size you can use, and the smallest number
+ * if you change eps, you might have to increase the width of the text field
+ * use NumberButton#setInputWidth
+ * NumberButton.inverseEps the integer power of 10 that is close to 1/eps
+ * all numbers multiplied with this power are essentially integers (still rounding required)
+ * for more details see NumberButton#setStep
+ * @method numberButton.setPrecision
+ * @param {float} eps
+ */
+NumberButton.setPrecision = function(eps) {
+    NumberButton.eps = Math.min(1, Math.abs(eps));
+    if (NumberButton.eps < 0.0000000001) {
+        console.error("NumberButton.setPrecision: eps is too small, it is " + eps);
+    }
+    // get the integer power of ten matching 1/eps
+    // any number multiplied with this power should be an integer 
+    // (except for errors due to binary representation, thus do rounding)
+    NumberButton.inverseEps = Math.pow(10, Math.round(-Math.log10(NumberButton.eps)));
+};
+
+// default value
+NumberButton.setPrecision(0.0001);
+
+/**
+ * find step suitable to given value
+ * it is always a negative power of ten, or 1 for integers
+ * it corresponds to the fixed point position of the last nonzero digit greater than 1
+ * multiplying the value with the inverse of the step makes that it is nearly an integer
+ * @method NumberButton.findStep
+ * @param {number} value
+ * @return a suitable step size, return undefined if value is undefined
+ */
 NumberButton.findStep = function(value) {
-    const s = value + "";
-    const point = s.indexOf(".");
-    if (point < 0) {
-        return 1;
+    if (guiUtils.isDefined(value)) {
+        if (guiUtils.isInteger(value)) {
+            return 1;
+        } else {
+            const eps = NumberButton.eps; // precision,max number of digits
+            value = Math.max(Math.abs(value), 2 * eps);
+            let step = 0.1;
+            let valueDivStep = value / step;
+            while (Math.abs(Math.round(valueDivStep) - valueDivStep) > 0.9 * eps) {
+                step *= 0.1;
+                valueDivStep = value / step;
+            }
+            return step;
+        }
     } else {
-        return 1.01 * Math.pow(0.1, s.length - point - 1);
+        return value;
     }
 };
 
@@ -178,6 +233,36 @@ NumberButton.prototype.updateStyle = function() {
 NumberButton.prototype.colorStyleDefaults = Button.prototype.colorStyleDefaults;
 
 /**
+ * set if button is active
+ * @method NumberButton#setActive
+ * @param {boolean} isActive
+ */
+NumberButton.prototype.setActive = function(isActive) {
+    if (this.isActive !== isActive) {
+        this.active = isActive;
+        this.input.disabled = !isActive;
+        if (isActive) {
+            this.input.style.cursor = "text";
+        } else {
+            this.input.style.cursor = "default";
+            this.pressed = false;
+            this.hover = false;
+        }
+        if (this.range) {
+            this.range.disabled = !isActive;
+            if (isActive) {
+                this.range.style.cursor = "pointer";
+            } else {
+                this.range.style.cursor = "default";
+            }
+        }
+        this.addButtons.forEach(button => button.setActive(isActive));
+        this.updateStyle();
+    }
+};
+
+
+/**
  * switch on the indicator, set its element (it's the background) , adjust to current value
  * @method NumberButton#setIndicatorElement
  * @param {html element} element
@@ -218,22 +303,41 @@ NumberButton.prototype.setInputWidth = function(width) {
 };
 
 /**
- * quantize a number according to step and clamp to range
- * wraparound if cyclic, and quantize
+ * wraparound if cyclic
+ * quantize a number according to step, with minValue as basis 
+ * see NumberButton#setStep and note that step = this.stepInt / NumberButton.inverseEps;
+ * clamp to range
  * @method NumberButton#quantizeClamp
  * @param {float} x
  * @return float, quantized x
  */
 NumberButton.prototype.quantizeClamp = function(x) {
     if (this.cyclic) {
-        // wraparound
+        // wraparound, minValue as basis
         x -= this.minValue;
         const d = this.maxValue - this.minValue;
         x = x - d * Math.floor(x / d);
         x += this.minValue;
     }
-    // quantize and clamp
-    x = Math.max(this.minValue, Math.min(this.step * Math.round(x / this.step), this.maxValue));
+    // quantize difference to minValue, make that value is larger than min value
+    x = Math.max(x - this.minValue, 0);
+    // multiply with step size and quantize as integer
+    x = Math.round(x * NumberButton.inverseEps / this.stepInt);
+    // devide by step size and add to minimum value
+    x = this.minValue + x * this.stepInt / NumberButton.inverseEps;
+    // make that value is less than max value
+    if (x > this.maxValue) {
+        x = this.maxValue;
+        // attention: the intervall may not be a multiple of the step size
+        // quantize again
+        x = Math.round((x - this.minValue) * NumberButton.inverseEps / this.stepInt);
+        // devide by step size and add to minimum value
+        x = this.minValue + x * this.stepInt / NumberButton.inverseEps;
+        // the result might now be larger than the maxValue, thus
+        if (x > this.maxValue) {
+            x -= this.step;
+        }
+    }
     return x;
 };
 
@@ -260,7 +364,7 @@ NumberButton.prototype.setValue = function(number) {
     if (guiUtils.isNumber(number)) {
         number = this.quantizeClamp(number);
         this.lastValue = number;
-        this.input.value = number.toFixed(this.digits);
+        this.input.value = number.toFixed(this.digitsAfterPoint);
         if (this.range) {
             this.range.value = number.toString();
         }
@@ -291,10 +395,15 @@ NumberButton.prototype.setValue = function(number) {
  */
 NumberButton.prototype.updateValue = function(number) {
     if (guiUtils.isNumber(number)) {
-        number = this.quantizeClamp(number);
         if (this.lastValue !== number) { // does it really change??
-            this.setValue(number); // update numbers before action
-            this.onChange(number);
+            number = this.quantizeClamp(number);
+            // it may be that after quantization we get the same number, then nothing changed, but we need update of ui
+            if (this.lastValue !== number) {
+                this.setValue(number); // update numbers before action
+                this.onChange(number);
+            } else {
+                this.setValue(number); // no action   
+            }
         }
     } else {
         this.setValue(this.lastValue); // overwrite garbage, do nothing
@@ -320,27 +429,30 @@ NumberButton.prototype.applyChanges = function() {
 };
 
 /**
- * change step to number smaller than 1 to get float
- * will be a power of ten
+ * set minimum step size for numbers ("quantization")
+ * note problem for step sizes smaller than one: not exactly represented with floating point numbers
+ * thus, this.step is not accurate, instead use "decimal" representation
+ * this.stepInt is an integer and NumberButton.inverseEps is a power of ten, 
+ * then this.step==this.stepInt/NumberButton.inverseEps without error due to finite precision
+ * if this.step>=1, then this.stepInvPow=1
+ * this.digitsAfterPoint is number of digits after decimal point, used for converting number to string
  * @method NumberButton#setStep
  * @param {float} step - the step size (rounding)
  */
 NumberButton.prototype.setStep = function(step) {
-    if (step >= 1) {
-        this.digits = 0;
-        this.step = 1;
-        step = (step + 1) / 10;
-        while (this.step <= step) {
-            this.step *= 10;
-        }
-    } else {
-        this.step = 1;
-        this.digits = 0;
-        step *= 1.1;
-        while (this.step >= step) {
-            this.step *= 0.1;
-            this.digits++;
-        }
+    // beware of negative numbers and too small numbers
+    const eps = NumberButton.eps; // precision, minimum step size
+    step = Math.max(eps, Math.abs(step));
+    // analyze: find power of 10, such that step*powerOf10>=0.9 (for safety, 0.9 and not 1)
+    this.digitsAfterPoint = 0;
+    this.stepInt = Math.round(step * NumberButton.inverseEps);
+    this.step = this.stepInt / NumberButton.inverseEps;
+    this.digitsAfterPoint = 0;
+    // number of digits results from the power of ten times the step giving nearly an integer
+    let stepPower10 = this.step;
+    while (Math.abs(Math.round(stepPower10) - stepPower10) > eps * stepPower10) {
+        this.digitsAfterPoint += 1;
+        stepPower10 *= 10;
     }
     this.applyChanges();
 };
@@ -358,21 +470,21 @@ NumberButton.prototype.setRange = function(minValue, maxValue) {
 };
 
 /**
- * set the lower limit for numbers, maxValue is unchanged
- * @method NumberButton#setLow
+ * set the minimum value for numbers, maxValue is unchanged
+ * @method NumberButton#setMin
  * @param {integer} minValue
  */
-NumberButton.prototype.setLow = function(minValue) {
+NumberButton.prototype.setMin = function(minValue) {
     this.minValue = minValue;
     this.applyChanges();
 };
 
 /**
- * set the upper limit for numbers, minValue is unchanged
- * @method NumberButton#setHigh
+ * set the maximum value for numbers, minValue is unchanged
+ * @method NumberButton#setMax
  * @param {integer} maxValue
  */
-NumberButton.prototype.setHigh = function(maxValue) {
+NumberButton.prototype.setMax = function(maxValue) {
     this.maxValue = maxValue;
     this.applyChanges();
 };
@@ -657,13 +769,19 @@ NumberButton.prototype.createRange = function(parent) {
         };
 
         this.range.onkeydown = function() {
-            button.onInteraction();
+            if (this.active) {
+                button.onInteraction();
+            }
         };
         this.range.onmousedown = function() {
-            button.onInteraction();
+            if (this.active) {
+                button.onInteraction();
+            }
         };
         this.range.onwheel = function() {
-            button.onInteraction();
+            if (this.active) {
+                button.onInteraction();
+            }
         };
     }
     return this.range;

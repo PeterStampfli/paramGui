@@ -1,3 +1,5 @@
+/* jshint esversion: 6 */
+
 /**
  * a color input element (container)
  * to simplify construction and destruction
@@ -15,6 +17,7 @@ import {
 export function ColorInput(parent, hasAlpha) {
     this.parent = parent;
     this.hasAlpha = hasAlpha;
+    this.active = true;
     // a textelement for showing/enetering hex color codes
     this.textElement = document.createElement("input");
     this.textElement.setAttribute("type", "text");
@@ -50,11 +53,11 @@ export function ColorInput(parent, hasAlpha) {
         this.rangeElement.max = 255;
         parent.appendChild(this.rangeElement);
     }
-    // initial value is (transparent) black
+    // initial value is opaque blue
     if (hasAlpha) {
-        this.setValue("#00000000");
+        this.setValue("#0000ffff");
     } else {
-        this.setValue("#000000");
+        this.setValue("#0000ff");
     }
 
     const colorInput = this;
@@ -66,54 +69,71 @@ export function ColorInput(parent, hasAlpha) {
 
     // hovering, focus -> styling
     this.textElement.onmouseenter = function() {
-        colorInput.textHover = true;
-        colorInput.updateTextStyle();
+        if (colorInput.active) {
+            colorInput.textHover = true;
+            colorInput.updateTextStyle();
+        }
     };
 
     this.textElement.onmouseleave = function() {
-        colorInput.textHover = false;
-        colorInput.updateTextStyle();
+        if (colorInput.active) {
+            colorInput.textHover = false;
+            colorInput.updateTextStyle();
+        }
     };
 
     this.textElement.onmousedown = interaction;
 
     // onfocus /onblur corresponds to pressed
     this.textElement.onfocus = function() {
-        colorInput.textPressed = true;
-        colorInput.updateTextStyle();
+        if (colorInput.active) {
+            colorInput.textPressed = true;
+            colorInput.updateTextStyle();
+        }
     };
 
     this.textElement.onblur = function() {
-        colorInput.textPressed = false;
-        colorInput.updateTextStyle();
+        if (colorInput.active) {
+            colorInput.textPressed = false;
+            colorInput.updateTextStyle();
+        }
     };
 
     this.colorElement.onmouseenter = function() {
-        colorInput.colorHover = true;
-        colorInput.updateColorStyle();
+        if (colorInput.active) {
+            colorInput.colorHover = true;
+            colorInput.updateColorStyle();
+        }
     };
 
     this.colorElement.onmouseleave = function() {
-        colorInput.colorHover = false;
-        colorInput.updateColorStyle();
+        if (colorInput.active) {
+            colorInput.colorHover = false;
+            colorInput.updateColorStyle();
+        }
     };
 
     // doing things
     this.textElement.onchange = function() {
-        let color = colorInput.textElement.value;
-        if (color.charAt(0) !== "#") { // in case add missing # at beginning
-            color = "#" + color;
+        if (colorInput.active) {
+            let color = colorInput.textElement.value;
+            if (color.charAt(0) !== "#") { // in case add missing # at beginning
+                color = "#" + color;
+            }
+            colorInput.updateValue(color);
         }
-        colorInput.updateValue(color);
     };
 
-    // get color value from the browsers color input
+    // get color value from the browsers color input and range element( if there is an alpha)
+    // used both for changges in the range element and the RGB color chooser
     function colorElementInput() {
-        let color = colorInput.colorElement.value;
-        if (colorInput.hasAlpha) { // combine rgb with alpha from range (all elements are synchro)
-            color = ColorInput.rgbaFromRGBAndAlpha(color, colorInput.rangeElement.value);
+        if (colorInput.active) {
+            let color = colorInput.colorElement.value;
+            if (colorInput.hasAlpha) { // combine rgb with alpha from range (all elements are synchro)
+                color += hexString(colorInput.rangeElement.value);
+            }
+            colorInput.updateValue(color);
         }
-        colorInput.updateValue(color);
     }
 
     this.colorElement.oninput = colorElementInput;
@@ -163,22 +183,27 @@ ColorInput.prototype.colorStyleDefaults = Button.prototype.colorStyleDefaults;
  * @method ColorInput#updateTextStyle
  */
 ColorInput.prototype.updateTextStyle = function() {
-    if (this.textPressed) {
-        if (this.textHover) {
-            this.textElement.style.color = this.colorDownHover;
-            this.textElement.style.backgroundColor = this.backgroundColorDownHover;
+    if (this.active) {
+        if (this.textPressed) {
+            if (this.textHover) {
+                this.textElement.style.color = this.colorDownHover;
+                this.textElement.style.backgroundColor = this.backgroundColorDownHover;
+            } else {
+                this.textElement.style.color = this.colorDown;
+                this.textElement.style.backgroundColor = this.backgroundColorDown;
+            }
         } else {
-            this.textElement.style.color = this.colorDown;
-            this.textElement.style.backgroundColor = this.backgroundColorDown;
+            if (this.textHover) {
+                this.textElement.style.color = this.colorUpHover;
+                this.textElement.style.backgroundColor = this.backgroundColorUpHover;
+            } else {
+                this.textElement.style.color = this.colorUp;
+                this.textElement.style.backgroundColor = this.backgroundColorUp;
+            }
         }
     } else {
-        if (this.textHover) {
-            this.textElement.style.color = this.colorUpHover;
-            this.textElement.style.backgroundColor = this.backgroundColorUpHover;
-        } else {
-            this.textElement.style.color = this.colorUp;
-            this.textElement.style.backgroundColor = this.backgroundColorUp;
-        }
+        this.textElement.style.color = this.colorInactive;
+        this.textElement.style.backgroundColor = this.backgroundColorInactive;
     }
 };
 
@@ -188,10 +213,16 @@ ColorInput.prototype.updateTextStyle = function() {
  * @method ColorInput#updateStyle
  */
 ColorInput.prototype.updateColorStyle = function() {
-    if (this.colorHover) {
-        this.colorElement.style.backgroundColor = this.backgroundColorUpHover;
+    if (this.active) {
+        this.colorElement.style.cursor = "pointer";
+        if (this.colorHover) {
+            this.colorElement.style.backgroundColor = this.backgroundColorUpHover;
+        } else {
+            this.colorElement.style.backgroundColor = this.backgroundColorUp;
+        }
     } else {
-        this.colorElement.style.backgroundColor = this.backgroundColorUp;
+        this.colorElement.style.cursor = "default";
+        this.colorElement.style.backgroundColor = this.backgroundColorInactive;
     }
 };
 
@@ -231,6 +262,93 @@ ColorInput.prototype.setWidths = function(textWidth, colorWidth, rangeWidth) {
     }
 };
 
+/**
+ * set if input is active
+ * @method NumberButton#setActive
+ * @param {boolean} isActive
+ */
+ColorInput.prototype.setActive = function(isActive) {
+    if (this.isActive !== isActive) {
+        this.active = isActive;
+        this.textElement.disabled = !isActive;
+        this.updateTextStyle();
+        this.colorElement.disabled = !isActive;
+        this.updateColorStyle();
+        if (!this.active) {
+            this.textHover = false;
+            this.textPressed = false;
+        }
+        if (this.hasAlpha) {
+            this.rangeElement.disabled = !isActive;
+            if (this.active) {
+                this.rangeElement.style.cursor = "pointer";
+            } else {
+                this.rangeElement.style.cursor = "default";
+            }
+        }
+    }
+};
+
+/*
+ * make a 2digits hex string from a number
+ * the number is rounded and clamped to 0...255
+ * if the argument is a string, parses it. Usually as decimale number. 
+ "# ...." and "0x ..." are hexadecimal numbers.
+ * If all fails makes an error message and returns "00"
+ */
+function hexString(number) {
+    if (guiUtils.isString(number)) {
+        if (number.substring(0, 1) === "#") {
+            number = parseInt(number.substring(1), 16);
+        } else {
+            number = parseInt(number);
+        }
+    }
+    if (!guiUtils.isNumber(number)) {
+        console.error('hexString: Input is not a number or number string, its value is ' + number);
+        number = 0;
+    }
+    number = Math.max(0, Math.min(255, Math.round(number)));
+    let result = number.toString(16);
+    if (result.length === 1) {
+        result = "0" + result;
+    }
+    return result;
+}
+
+/**
+ * make a color string from an object with red, green and blue fields, eventually an alpha field
+ * return false if color fields are missing
+ * @method ColorInput.stringFromObject
+ * @param {object} obj
+ * return hex color string or undefined (==false)
+ */
+ColorInput.stringFromObject = function(obj) {
+    var result;
+    if (guiUtils.isDefined(obj.red) && guiUtils.isDefined(obj.green) && guiUtils.isDefined(obj.blue)) {
+        result = "#" + hexString(obj.red) + hexString(obj.green) + hexString(obj.blue);
+        if (guiUtils.isDefined(obj.alpha)) {
+            result += hexString(obj.alpha);
+        }
+    }
+    return result;
+};
+
+/**
+ * set the red, green and blue fields of a parameter object, and eventually an alpha field
+ * depending on a hex color string of form "#rrggbb" or "rrggbbaa"
+ * @method ColorInput.setObject
+ * @param {object} obj
+ * @ param {String} color
+ */
+ColorInput.setObject = function(obj, color) {
+    obj.red = parseInt(color.substring(1, 3), 16);
+    obj.green = parseInt(color.substring(3, 5), 16);
+    obj.blue = parseInt(color.substring(5, 7), 16);
+    if (color.length === 9) {
+        obj.alpha = parseInt(color.substring(7, 9), 16);
+    }
+};
 
 /**
  * test if a color string has alpha
@@ -317,37 +435,29 @@ ColorInput.prototype.alphaFrom = function(color) {
 };
 
 /**
- * transform a color string and an integer alpha to a standard rgba string
- * does not check the input for errors, does the most obvious
- * @method ColorInput.rgbaFromRGBAndAlpha
- * @param {String} color - may also be rgba, a is discarded
- * @param {integer} alpha
- * @return String, the transformed color string
- */
-ColorInput.rgbaFromRGBAndAlpha = function(color, alpha) {
-    alpha = Math.max(0, Math.min(255, Math.round(alpha)));
-    alpha = alpha.toString(16);
-    if (alpha.length === 1) {
-        alpha = "0" + alpha;
-    }
-    return ColorInput.rgbFrom(color) + alpha;
-};
-
-/**
  * get value of colorInput,assumes that the textelement has the correct value
  * @method ColorInput#getValue
+ * @param {object} colorObject - optional, gets the color values
  * @return String, the color as hex string "#rrggbb"
  */
-ColorInput.prototype.getValue = function() {
+ColorInput.prototype.getValue = function(colorObject) {
+    if (guiUtils.isObject(colorObject)) {
+        ColorInput.setObject(colorObject, this.textElement.value);
+    }
     return this.textElement.value;
 };
 
 /**
- * set value of input, does nothing if wrong, changes to standard format if ok
+ * set value of input, error message if argument not ok
  * @method ColorInput#setValue
- * @param {String} text
+ * @param {String||object} arg - color string or color object with red, green, blue (and alpha)
  */
-ColorInput.prototype.setValue = function(text) {
+ColorInput.prototype.setValue = function(arg) {
+    let text = arg;
+    // get color string from a color object, if there is one
+    if (guiUtils.isObject(arg)) {
+        text = ColorInput.stringFromObject(arg);
+    }
     if (guiUtils.isColorString(text)) {
         const color = this.colorFrom(text);
         this.lastValue = color;
@@ -357,18 +467,22 @@ ColorInput.prototype.setValue = function(text) {
             this.rangeElement.value = this.alphaFrom(color);
         }
     } else {
-        console.error("ColorInput#setValue: argument is not a good color string");
-        console.log('its value is ' + text + ' of type "' + (typeof text) + '"');
-        console.log("should be a string of form '#rrggbb' or '#rrggbbaa'");
+        console.error("ColorInput#setValue: argument is not a good color string or object");
+        console.log('its value is of type "' + (typeof arg) + '":');
+        console.log(arg);
+        console.log("should be a color object or a string of form '#rrggbb' or '#rrggbbaa'");
     }
 };
 
 /**
+ * do not call this method from the outside
+ * method is used only if textinput, color or range elements change
+ * they convert data into a string
  * check if text is a color
  * if color changes do this.onChange and set element values
- * thus we can use it for initialization
+ * else reset things
  * @method ColorInput#updateValue
- * @param {String} text - the color
+ * @param {String} arg - color string 
  */
 ColorInput.prototype.updateValue = function(text) {
     if (guiUtils.isColorString(text)) {
@@ -378,10 +492,7 @@ ColorInput.prototype.updateValue = function(text) {
             this.onChange(color);
         }
     } else {
-        this.setValue(this.lastValue);
-        console.error("ColorInput#updateValue: argument is not a good color string");
-        console.log('its value is ' + text + ' of type "' + (typeof text) + '"');
-        console.log("should be a string of form '#rrggbb' or '#rrggbbaa'");
+        this.setValue(this.lastValue); // resets the color text, to overwrite garbage
     }
 };
 

@@ -17,9 +17,9 @@ import {
     ParamGui,
     InstantHelp,
 }
-from "./modules.js";
+from "../modules.js";
 
-ParamGui.logConversion = true;
+//ParamGui.logConversion = true;
 
 
 const gui = new ParamGui({
@@ -28,6 +28,8 @@ const gui = new ParamGui({
 });
 
 gui.addParagraph("This is a <strong>demo</strong> for the new gui API. See the source code");
+
+gui.add({type:'textarea',rows:4,columns:20,labelText:"new textarea",initialValue:"We can write long texts\nwith multiple lines"});
 
 const parameters = {};
 
@@ -52,9 +54,12 @@ gui.add({
         property: "indi",
         min: 0,
         max: 10,
-        stepSize: 0.01
+        step: 0.01
     })
     .createIndicatorMain();
+gui.changeDesign({
+    usePopup: false
+});
 parameters.plusMin = 2;
 gui.add({
         type: "number",
@@ -68,7 +73,7 @@ gui.add({
     .createMaxMinButtons();
 gui.addParagraph("The additional buttons can go to a popup, appears when changing the number.");
 gui.changeDesign({
-    popupForNumberController: true
+    usePopup: true
 });
 gui.addParagraph("No parameter object together with property string required. A callback can be added directly.");
 const popController = gui.add({
@@ -169,12 +174,17 @@ gui.add({
 });
 
 parameters.selection = "beta";
-gui.add({
+const sele=gui.add({
     type: "selection",
     params: parameters,
     property: "selection",
     options: ["alpha", "beta", "gamma", "delta", "epsilon"]
 });
+
+sele.addOption("zeta");
+
+gui.setActive(false);
+gui.setActive(true);
 </script>
 
 </html>

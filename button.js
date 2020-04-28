@@ -1,3 +1,5 @@
+/* jshint esversion: 6 */
+
 /**
  * a text button 
  * simple push button
@@ -23,7 +25,7 @@ export function Button(text, parent) {
     // states
     this.pressed = false;
     this.hover = false;
-    this.active = true; // allows switching off
+    this.active = true;
     this.colorStyleDefaults();
     this.updateStyle();
     this.element.disabled = false;
@@ -103,7 +105,7 @@ Button.backgroundColorDownHover = "#ffff44";
 Button.backgroundColorDown = "#ffff88";
 // for switched off
 Button.colorInactive = "black";
-Button.backgroundColorInactive = "#aaaaaa";
+Button.backgroundColorInactive = "#cccccc";
 
 /**
  * update the color style of the element depending on whether its pressed or hovered
@@ -229,16 +231,18 @@ Button.prototype.colorStyleForTransparentSpan = function(color) {
  * @param {boolean} isActive
  */
 Button.prototype.setActive = function(isActive) {
-    this.active = isActive;
-    this.element.disabled = !isActive;
-    if (isActive) {
-        this.element.style.cursor = "pointer";
-    } else {
-        this.element.style.cursor = "default";
-        this.pressed = false;
-        this.hover = false;
+    if (this.isActive !== isActive) {
+        this.active = isActive;
+        this.element.disabled = !isActive;
+        if (isActive) {
+            this.element.style.cursor = "pointer";
+        } else {
+            this.element.style.cursor = "default";
+            this.pressed = false;
+            this.hover = false;
+        }
+        this.updateStyle();
     }
-    this.updateStyle();
 };
 
 /**
@@ -274,7 +278,7 @@ Button.prototype.asFileInput = function(accept = ".jpg") {
  */
 Button.prototype.destroy = function() {
     this.onClick = null;
-    this.onMouseDown = null;
+    this.onInteraction = null;
     this.onFileInput = null;
     if (this.isFileInput) {
         this.fileInput.onchange = null;
@@ -311,18 +315,21 @@ Button.disable = function(buttons) {
     }
 };
 
+// open-close, if closed something (titlebar) is still visible 
+// show-hide, if hidden nothing is visible
+
 /**
- * open the button
- * @method Button#open
+ * show the button
+ * @method Button#show
  */
-Button.prototype.open = function() {
+Button.prototype.show = function() {
     guiUtils.displayInlineBlock(this.element);
 };
 
 /**
- * close the button
- * @method Button#close
+ * hide the button
+ * @method Button#hide
  */
-Button.prototype.close = function() {
+Button.prototype.hide = function() {
     guiUtils.displayNone(this.element);
 };

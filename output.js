@@ -20,9 +20,22 @@ output.div = false;
 output.divHeight = 0;
 output.divWidth = 0;
 
-// a method to (re)draw the canvas upon resize
-// call it after initialization to get a first image
-output.draw = function() {};
+/**
+ * a method to (re)draw the canvas upon resize and so on
+ * define your own to get your image
+ * call it after initialization to get a first image
+ * to avoid flickering use in the beginning output.draw = function(){};
+ * @method output.draw
+ */
+output.draw = function() {
+    const canvas = output.canvas;
+    const context = output.canvas.getContext('2d');
+    context.fillStyle = 'blue';
+    context.fillRect(0, 0, output.canvas.width, output.canvas.height);
+    context.fillStyle = 'white';
+    context.font = Math.round(canvas.height / 20) + 'px FreeSans';
+    context.fillText('Please define the output.draw() method!', canvas.width / 20, canvas.height / 2, canvas.width * 0.9);
+};
 
 /**
  * get the limit for free space at the left
@@ -218,7 +231,7 @@ function autoResize() {
  * you can set its width to height ratio to a fixed value in output.setCanvasWidthToHeight
  * @method output.createCanvas
  * @param {ParamGui} gui - the gui that controls the canvas
- * @param {string} folderName - optional name for folder, no folder if missing
+ * @param {string|Object} folderName - optional name or arguments/design object for folder, no folder if missing
  */
 var widthController, heightController, sizeController;
 var autoResizeController, autoScaleController, extendCanvasController;
@@ -229,7 +242,7 @@ output.createCanvas = function(gui, folderName) {
         return;
     }
     output.canvas = document.createElement("canvas");
-    if (guiUtils.isString(folderName)) {
+    if (guiUtils.isDefined(folderName)) {
         gui = gui.addFolder(folderName);
     }
 
@@ -259,8 +272,8 @@ output.createCanvas = function(gui, folderName) {
 
     widthController = gui.add({
         type: "number",
-        min: 100,
         max: 10000,
+        step:1,
         params: output.canvas,
         property: "width",
         onChange: function(value) {
@@ -276,8 +289,8 @@ output.createCanvas = function(gui, folderName) {
     widthController.hSpace(30);
     heightController = widthController.add({
         type: "number",
-        min: 100,
         max: 10000,
+        step:1,
         params: output.canvas,
         property: "height",
         onChange: function(value) {
@@ -370,14 +383,36 @@ let canvasWidthToHeight = -1;
 output.setCanvasWidthToHeight = function(ratio) {
     if (Math.abs(canvasWidthToHeight - ratio) > 0.0001) { // do this only if ratio changes, thus always 
         canvasWidthToHeight = ratio;
-        // if autoresizing we do not need to set canvas dimensions 
-        //because autoResize does this automatically (better names ?)
-        if (!autoResizeController.getValue() && (ratio > 0.0001)) {
-            const width = Math.sqrt(widthController.getValue() * heightController.getValue() * canvasWidthToHeight);
-            widthController.setValueOnly(width);
-            heightController.setValueOnly(width / canvasWidthToHeight);
+        if (ratio > 0.0001) {
+            // need to change the canvas dimensions
+            // if not autoresizing we do not need to set explicitely canvas dimensions 
+            if (!autoResizeController.getValue()) {
+                const width = Math.sqrt(widthController.getValue() * heightController.getValue() * canvasWidthToHeight);
+                widthController.setValueOnly(width);
+                heightController.setValueOnly(width / canvasWidthToHeight);
+            }
+            autoResize();
         }
     }
+};
+
+/**
+ * set that the canvas dimensions are integer multiples of a basic step size
+ * you need this for making images with rectangular tiles
+ * the sides of the tiles should be integer numbers to get an image without artificial dark lines
+ * @method output.setCanvasDimensions
+ * @param {int} stepVertical
+ * @param {int} stepHorizontal - optional, default is stepHorizontal
+ */
+output.setCanvasDimensionsStepsize = function(stepVertical, stepHorizontal = stepVertical) {
+    const oldWidth = output.canvas.width;
+    const oldHeight = output.canvas.height;
+    widthController.setStep(stepVertical);
+    heightController.setStep(stepHorizontal);
+    if ((oldWidth !== output.canvas.width) || (oldHeight !== output.canvas.height)) {
+        output.draw();
+    }
+    autoResize();
 };
 
 /**
@@ -391,7 +426,6 @@ output.setCanvasWidthToHeight = function(ratio) {
  * @param {ParamGui} gui - where the buttons go to
  * @param {...object} buttonDefinition - repeated for several on a line
  */
-
 function makeArgs(buttonDefinition) {
     const result = {
         type: 'button'

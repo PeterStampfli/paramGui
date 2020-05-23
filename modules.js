@@ -77,9 +77,19 @@ export {
 from "./textInput.js";
 
 export {
-    NumberButton
+    Integer
 }
-from "./numberButton.js";
+from "./integer.js";
+
+export {
+    FixedPoint
+}
+from "./fixedPoint.js";
+
+export {
+    FloatingPoint
+}
+from "./floatingPoint.js";
 
 export {
     Select

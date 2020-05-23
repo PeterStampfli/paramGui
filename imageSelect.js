@@ -19,6 +19,7 @@ import {
 } from "./modules.js";
 
 export function ImageSelect(parent, newDesign) {
+    this.parent = parent;
     this.active = true;
     const design = {};
     this.design = design;
@@ -129,22 +130,22 @@ export function ImageSelect(parent, newDesign) {
 /**
  * set if button is active
  * @method ImageSelect#setActive
- * @param {boolean} isActive
+ * @param {boolean} on
  */
-ImageSelect.prototype.setActive = function(isActive) {
-    if (this.isActive !== isActive) {
-        this.active = isActive;
-        if (!isActive) {
+ImageSelect.prototype.setActive = function(on) {
+    if (this.active !== on) {
+        this.active = on;
+        if (!on) {
             this.closePopup();
         }
-        this.select.setActive(isActive);
-        if (isActive) {
+        this.select.setActive(on);
+        if (on) {
             this.guiImage.style.cursor = 'pointer';
         } else {
             this.guiImage.style.cursor = 'default';
         }
         if (this.userInput) {
-            this.userInput.setActive(isActive);
+            this.userInput.setActive(on);
         }
     }
 };
@@ -191,7 +192,7 @@ ImageSelect.prototype.createGuiImage = function(parent) {
     const imageSelect = this;
 
     this.guiImage.onmousedown = function() {
-        if (imageSelect.isActive) {
+        if (imageSelect.active) {
             imageSelect.select.element.focus(); // makes that keyboard events (arrows) go to the select ui element, not elsewhere
             imageSelect.interaction();
             return false;
@@ -200,7 +201,7 @@ ImageSelect.prototype.createGuiImage = function(parent) {
 
     // mousewheel on icon
     this.guiImage.onwheel = function(event) {
-        if (imageSelect.isActive) {
+        if (imageSelect.active) {
             event.preventDefault();
             event.stopPropagation();
             if (event.deltaY > 0) {
@@ -246,7 +247,7 @@ ImageSelect.defaultDesign = {
     popupShadowWidth: 0,
     popupShadowBlur: 0,
     popupZIndex: 18, // smaller (between) than hint popup
-    popupPosition: "bottomRight",
+    popupPosition: "topRight",
     popupHorizontalShift: 0
 };
 
@@ -316,6 +317,8 @@ ImageSelect.prototype.makeImageButtonVisible = function(imageButton) {
 ImageSelect.prototype.interaction = function() {
     if (this.active) {
         this.popup.open();
+        const topPosition = guiUtils.topPosition(this.parent);
+        this.popup.setCenterPosition(topPosition + this.parent.offsetHeight / 2);
         const index = this.getIndex(); // in case that parameter is out of range
         if (index >= 0) {
             this.makeImageButtonVisible(this.popupImageButtons[index]);
@@ -430,8 +433,10 @@ ImageSelect.prototype.addOptions = function(options) {
  * test if it is really an image
  * add as option object {name: file name without extension, icon: dataURL of file, image: dataURL of file}
  * do this with overhead and threadsafe (?), loading multiple images results in concurrent threads
+ * param file is the file object
+ * param selectThis: if true, then make that this file is selected, and everything updated
  */
-ImageSelect.prototype.addUserImage = function(file) {
+ImageSelect.prototype.addUserImage = function(file, selectThis = false) {
     if (guiUtils.isGoodImageFile(file.name)) {
         const fileReader = new FileReader();
         const imageSelect = this;
@@ -444,11 +449,17 @@ ImageSelect.prototype.addUserImage = function(file) {
             option.icon = fileReader.result;
             option.value = fileReader.result;
             imageSelect.addOptions(option);
-            // make the loaded image poptentially visible, do not change selection
+            // make the loaded image potentially visible
+            // chnge selecction if selectThis
             const index = imageSelect.findIndex(fileReader.result);
             if (index >= 0) {
                 imageSelect.makeImageButtonVisible(imageSelect.popupImageButtons[index]);
                 imageSelect.loadImages();
+                if (selectThis) {
+                    imageSelect.setValue(fileReader.result);
+                    imageSelect.update();
+                    imageSelect.onChange();
+                }
             }
         };
 
@@ -476,6 +487,7 @@ ImageSelect.addImagePopupText = "drop images here!";
  * its standard methods may have to be changed for structured image select
  * it is related to the ImageSelect, where the user images go to
  * does not add the button to this, it may belong to some higher ui element group (?)
+ * make that first loaded image will be selected
  * @method ImageSelect#makeAddImageButton
  * @param {htmlElement} parent
  * @return Button
@@ -498,8 +510,12 @@ ImageSelect.prototype.makeAddImageButton = function(parent) {
     // this is the callback to be called via the file input element after all files have been choosen by the user
     button.onFileInput = function(files) {
         // files is NOT an array
+        let selectThis = true;
         for (let i = 0; i < files.length; i++) {
-            imageSelect.addUserImage(files[i]);
+            const file = files[i];
+            imageSelect.addUserImage(file, selectThis);
+            // select only the first good image file
+            selectThis = selectThis && !guiUtils.isGoodImageFile(file.name);
         }
     };
 
@@ -510,6 +526,7 @@ ImageSelect.prototype.makeAddImageButton = function(parent) {
  * add message and drag and drop to the popup
  * good for simple image select
  * eventually rewrite methods (ondrop)
+ * make that first image will be selected
  * @method ImageSelect#addDragAndDrop
  */
 ImageSelect.prototype.addDragAndDrop = function() {
@@ -533,9 +550,14 @@ ImageSelect.prototype.addDragAndDrop = function() {
         event.preventDefault();
         const files = event.dataTransfer.files;
         // event.dataTransfer.files is NOT an array
+        let selectThis = true;
         for (let i = 0; i < files.length; i++) {
-            imageSelect.addUserImage(files[i]);
+            const file = files[i];
+            imageSelect.addUserImage(file, selectThis);
+            // select only the first good image file
+            selectThis = selectThis && !guiUtils.isGoodImageFile(file.name);
         }
+
     };
 };
 
@@ -612,21 +634,6 @@ ImageSelect.prototype.getValue = function() {
 };
 
 /**
- * find the index to a given value
- * searches first the selection values, then the labels
- * @method ImageSelect#findIndex
- * @param {whatever} value
- * @return number, index to first occurence of the value, -1 if not found
- */
-ImageSelect.prototype.findIndex = function(value) {
-    let index = this.values.indexOf(value);
-    if (index < 0) {
-        index = this.names.indexOf(value);
-    }
-    return index;
-};
-
-/**
  * set the choice
  * searches the values and then the labels, if not found makes error message
  * does not call the onChange callback
@@ -641,6 +648,58 @@ ImageSelect.prototype.setValue = function(value) {
         console.error("Image controller, setValue: argument not found in options");
         console.log('argument value is ' + value + ' of type "' + (typeof value) + '"');
     }
+};
+
+/*
+ * find the image name from an URL-string or a src string
+ */
+function imageName(imageSrc) {
+    const imageSrcPieces = imageSrc.split('/');
+    return imageSrcPieces[imageSrcPieces.length - 1];
+}
+
+/**
+ * do something with the selected image
+ * loads the selected image and uses it as argument for a callback function
+ * the image is also at this.image, but beware of image loading time delay
+ * @method ImageSelect.useImage
+ * @param {function} callback - function(image), image is a html image object
+ */
+ImageSelect.prototype.useImage = function(callback) {
+    const selectedImageSrc = this.getValue();
+    if (guiUtils.isGoodImageFile(selectedImageSrc)) {
+        if (!guiUtils.isDefined(this.image)) {
+            this.image = document.createElement("img");
+            this.image.style.display = 'none';
+            document.body.appendChild(this.image);
+        }
+        if (imageName(this.image.src) !== imageName(selectedImageSrc)) {
+            const thisImage = this.image;
+            this.image.onload = function() {
+                callback(thisImage);
+            };
+            this.image.src = selectedImageSrc;
+        } else {
+            callback(this.image);
+        }
+    } else {
+        console.error('ImageSelect.useImage: value "' + selectedImageSrc + '" is not a good image file name');
+    }
+};
+
+/**
+ * find the index to a given value
+ * searches first the selection values, then the labels
+ * @method ImageSelect#findIndex
+ * @param {whatever} value
+ * @return number, index to first occurence of the value, -1 if not found
+ */
+ImageSelect.prototype.findIndex = function(value) {
+    let index = this.values.indexOf(value);
+    if (index < 0) {
+        index = this.names.indexOf(value);
+    }
+    return index;
 };
 
 /**

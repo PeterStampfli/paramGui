@@ -9,9 +9,11 @@ import {
     ImageSelect,
     TextAreaInOut,
     Popup,
-    NumberButton,
     ParamGui,
-    InstantHelp
+    InstantHelp,
+    Integer,
+    FloatingPoint,
+    FixedPoint
 } from "./modules.js";
 
 /**
@@ -26,12 +28,12 @@ export function ParamController(gui, domElement, argObjects) {
     this.gui = gui;
     this.design = {};
     const design = this.design;
-    Object.assign(design,gui.design);
-        // update design parameters
-    const args={};
+    Object.assign(design, gui.design);
+    // update design parameters
+    const args = {};
     for (var i = 2; i < arguments.length; i++) {
         guiUtils.updateValues(design, arguments[i]);
-        Object.assign(args,arguments[i]);
+        Object.assign(args, arguments[i]);
     }
     this.domElement = domElement;
     const controller = this;
@@ -159,6 +161,7 @@ export function ParamController(gui, domElement, argObjects) {
                     // sets value to one of the option values, so parameter value will be equal to initial value
                     if (selectValues.findIndex(this.initialValue) >= 0) {
                         this.setValueOnly(this.initialValue); // index found, initial value might be its name or value
+                        this.initialValue = this.getValue();
                     } else {
                         // fallback: use first value of the options, set this value for the parameter too
                         selectValues.setIndex(0);
@@ -177,7 +180,7 @@ export function ParamController(gui, domElement, argObjects) {
                 break;
             case "boolean":
                 const booleanButton = new BooleanButton(this.domElement);
-                booleanButton.setWidth(this.design.booleanButtonWidth);
+                booleanButton.setWidth(guiUtils.check(args.width, this.design.booleanButtonWidth));
                 booleanButton.setFontSize(this.design.buttonFontSize);
                 guiUtils.hSpace(this.domElement, ParamGui.spaceWidth);
                 this.uiElement = booleanButton;
@@ -236,7 +239,7 @@ export function ParamController(gui, domElement, argObjects) {
                 this.uiElement = textInput;
                 this.setupOnChange();
                 this.setupOnInteraction();
-                textInput.setWidth(this.design.textInputWidth);
+                textInput.setWidth(guiUtils.check(args.width, this.design.textInputWidth));
                 textInput.setFontSize(this.design.buttonFontSize);
                 guiUtils.hSpace(this.domElement, ParamGui.spaceWidth);
                 if (guiUtils.isString(this.initialValue)) {
@@ -252,12 +255,22 @@ export function ParamController(gui, domElement, argObjects) {
                 }
                 break;
             case "number":
-                const numberButton = new NumberButton(this.domElement);
+                let numberButton = null;
+                if (guiUtils.isNumber(args.step)) {
+                    if (guiUtils.isInteger(args.step)) {
+                        // if args. min, max, offset are not integer, then we get an error message from integer.js
+                        numberButton = new Integer(this.domElement);
+                    } else {
+                        numberButton = new FixedPoint(this.domElement);
+                    }
+                } else {
+                    numberButton = new FloatingPoint(this.domElement);
+                }
                 this.uiElement = numberButton;
                 this.setupOnChange();
                 this.setupOnInteraction();
                 this.buttonContainer = false;
-                numberButton.setInputWidth(this.design.numberInputWidth);
+                numberButton.setInputWidth(guiUtils.check(args.width, this.design.numberInputWidth));
                 // separating space to additional elements
                 guiUtils.hSpace(this.domElement, ParamGui.spaceWidth);
                 // set limits and step
@@ -269,8 +282,9 @@ export function ParamController(gui, domElement, argObjects) {
                 }
                 if (guiUtils.isNumber(args.step)) {
                     numberButton.setStep(args.step);
-                } else {
-                    numberButton.setStep(NumberButton.findStep(this.initialValue));
+                    if (guiUtils.isNumber(args.offset)) {
+                        numberButton.setOffset(args.offset);
+                    }
                 }
                 // error checking and correction of initial value
                 if (guiUtils.isNumber(this.initialValue)) {
@@ -328,16 +342,16 @@ export function ParamController(gui, domElement, argObjects) {
                 if (guiUtils.isArray(args.options) || guiUtils.isObject(args.options)) {
                     imageSelect.addOptions(args.options);
                     // check if the initial value is in the options, accepts option names and values
-                    // sets value to one of the option values
                     if (imageSelect.findIndex(this.initialValue) >= 0) {
                         this.setValueOnly(this.initialValue);
+                        this.initialValue = this.getValue();
                     } else {
-                        // fallback: use first value of the options, set this value for the parameter too
+                        // not found, fallback: use first value of the options, set this value for the parameter too
                         imageSelect.setIndex(0);
-                        this.setValueOnly(imageSelect.getValue());
+                        this.setValueOnly(this.getValue());
                         noGoodInitialValue("initial value is not in options");
                     }
-                } else {
+                } else if (guiUtils.isDefined(args.options)) {
                     const message = document.createElement("span");
                     message.innerHTML = "&nbsps image: options is not an array or object";
                     this.domElement.appendChild(message);
@@ -345,6 +359,12 @@ export function ParamController(gui, domElement, argObjects) {
                     console.log('its value is ' + args.options + ' of type "' + (typeof args.options) + '"');
                     console.log("the arguments object is:");
                     console.log(args);
+                } else {
+                    imageSelect.addOptions({
+                        grey: ImageSelect.notLoadedURL
+                    });
+                    this.setValueOnly('grey');
+                    this.initialValue = this.getValue();
                 }
                 break;
             case "notype":
@@ -386,8 +406,8 @@ export function ParamController(gui, domElement, argObjects) {
             this.initialValue = this.uiElement.getValue();
         }
         // change the minimum element width if we have a controller
-        if (guiUtils.isObject(this.uiElement)&&(guiUtils.isFunction(this.uiElement.setMinWidth))) {
-           this.uiElement.setMinWidth(design.minElementWidth);
+        if (guiUtils.isObject(this.uiElement) && (guiUtils.isFunction(this.uiElement.setMinWidth))) {
+            this.uiElement.setMinWidth(design.minElementWidth);
         }
     } else {
         const message = document.createElement("span");
@@ -429,7 +449,7 @@ ParamController.prototype.setupOnInteraction = function() {
             if (controller.popup && !controller.popup.isOpen()) {
                 controller.popup.open();
                 const topPosition = guiUtils.topPosition(controller.domElement);
-                controller.popup.setTopPosition(topPosition - controller.design.paddingVertical);
+                controller.popup.setCenterPosition(topPosition + controller.domElement.offsetHeight / 2);
             }
             controller.callsClosePopup = true;
             ParamGui.closePopups();
@@ -487,7 +507,9 @@ ParamController.prototype.add = function(theParams, theProperty, low, high, step
         this.domElement.appendChild(message);
         return false;
     }
-    const controller = new ParamController(this.gui, this.domElement, {minLabelWidth:0},args);
+    const controller = new ParamController(this.gui, this.domElement, {
+        minLabelWidth: 0
+    }, args);
     return controller;
 };
 
@@ -594,6 +616,24 @@ ParamController.prototype.getValue = function(obj) {
     } else {
         console.error('Controller.getValue: There is no ui element because of unknown controller type "' + this.type + '".');
     }
+};
+
+/**
+ * for controller of type image
+ * do something with the selected image
+ * loads the selected image and uses it as argument for a callback function
+ * the image is also at this.image, but beware of image loading time delay
+ * @method ImageSelect.useImage
+ * @param {function} callback - function(image), image is a html image object
+ * @return this controller for chaining
+ */
+ParamController.prototype.useImage = function(callback) {
+    if (this.type === "image") {
+        this.uiElement.useImage(callback);
+    } else {
+        console.error('ParamController.useImage: Only for "image" controllers. Type of this controller: "' + this.type + '"');
+    }
+    return this;
 };
 
 /**
@@ -753,7 +793,7 @@ ParamController.prototype.hSpace = function(width) {
 };
 
 /**
- * register parent domElement in guiUtils for styling
+ * register the parent domElement of this controller in guiUtils for styling
  * see docu of guiUtils.style
  * use: controller.style().backgroundColor("red")
  * @method ParamController#style
@@ -839,6 +879,21 @@ ParamController.prototype.setMax = function(value) {
     return this;
 };
 
+/**
+ * set a step value for the number range
+ * @method ParamController#setStep
+ * @param {number} value
+ * @return this controller
+ */
+ParamController.prototype.setStep = function(value) {
+    if (this.type === "number") {
+        this.uiElement.setStep(value);
+    } else {
+        console.error('ParamController.setStep: Only for "number" controllers. Type of this controller: "' + this.type + '"');
+    }
+    return this;
+};
+
 // special parameters for these popups, not specified in paramGui
 ParamController.popupDesign = {
     popupBorderRadius: 0,
@@ -882,7 +937,7 @@ ParamController.prototype.createAddButton = function(text, amount) {
     if (this.type === "number") {
         this.setupButtonContainer();
         this.uiElement.createAddButton(text, this.buttonContainer, amount);
-        guiUtils.hSpace(this.buttonContainer, NumberButton.spaceWidth);
+        guiUtils.hSpace(this.buttonContainer, Integer.spaceWidth);
     } else {
         console.error('ParamController.createAddButton: Only for "number" controllers. Type of this controller: "' + this.type + '"');
     }
@@ -912,7 +967,7 @@ ParamController.prototype.createMulButton = function(text, amount) {
     if (this.type === "number") {
         this.setupButtonContainer();
         this.uiElement.createMulButton(text, this.buttonContainer, amount);
-        guiUtils.hSpace(this.buttonContainer, NumberButton.spaceWidth);
+        guiUtils.hSpace(this.buttonContainer, Integer.spaceWidth);
     } else {
         console.error('ParamController.createMulButton: Only for "number" controllers. Type of this controller: "' + this.type + '"');
     }
@@ -940,7 +995,7 @@ ParamController.prototype.createMiniButton = function() {
     if (this.type === "number") {
         this.setupButtonContainer();
         this.uiElement.createMiniButton(this.buttonContainer);
-        guiUtils.hSpace(this.buttonContainer, NumberButton.spaceWidth);
+        guiUtils.hSpace(this.buttonContainer, Integer.spaceWidth);
     } else {
         console.error('ParamController.createMiniButton: Only for "number" controllers. Type of this controller: "' + this.type + '"');
     }
@@ -956,7 +1011,7 @@ ParamController.prototype.createMaxiButton = function() {
     if (this.type === "number") {
         this.setupButtonContainer();
         this.uiElement.createMaxiButton(this.buttonContainer);
-        guiUtils.hSpace(this.buttonContainer, NumberButton.spaceWidth);
+        guiUtils.hSpace(this.buttonContainer, Integer.spaceWidth);
     } else {
         console.error('ParamController.createMaxiButton: Only for "number" controllers. Type of this controller: "' + this.type + '"');
     }
@@ -983,7 +1038,7 @@ ParamController.prototype.createLeftButton = function() {
     if (this.type === "number") {
         this.setupButtonContainer();
         this.uiElement.createLeftButton(this.buttonContainer);
-        guiUtils.hSpace(this.buttonContainer, NumberButton.spaceWidth);
+        guiUtils.hSpace(this.buttonContainer, Integer.spaceWidth);
     } else {
         console.error('ParamController.createLeftButton: Only for "number" controllers. Type of this controller: "' + this.type + '"');
     }
@@ -999,7 +1054,7 @@ ParamController.prototype.createRightButton = function() {
     if (this.type === "number") {
         this.setupButtonContainer();
         this.uiElement.createRightButton(this.buttonContainer);
-        guiUtils.hSpace(this.buttonContainer, NumberButton.spaceWidth);
+        guiUtils.hSpace(this.buttonContainer, Integer.spaceWidth);
     } else {
         console.error('ParamController.createRightButton: Only for "number" controllers. Type of this controller: "' + this.type + '"');
     }
@@ -1015,7 +1070,7 @@ ParamController.prototype.createDecButton = function() {
     if (this.type === "number") {
         this.setupButtonContainer();
         this.uiElement.createDecButton(this.buttonContainer);
-        guiUtils.hSpace(this.buttonContainer, NumberButton.spaceWidth);
+        guiUtils.hSpace(this.buttonContainer, Integer.spaceWidth);
     } else {
         console.error('ParamController.createDecButton: Only for "number" controllers. Type of this controller: "' + this.type + '"');
     }
@@ -1031,7 +1086,7 @@ ParamController.prototype.createIncButton = function() {
     if (this.type === "number") {
         this.setupButtonContainer();
         this.uiElement.createIncButton(this.buttonContainer);
-        guiUtils.hSpace(this.buttonContainer, NumberButton.spaceWidth);
+        guiUtils.hSpace(this.buttonContainer, Integer.spaceWidth);
     } else {
         console.error('ParamController.createIncButton: Only for "number" controllers. Type of this controller: "' + this.type + '"');
     }
@@ -1061,7 +1116,7 @@ ParamController.prototype.createSuggestButton = function(value) {
     if (this.type === "number") {
         this.setupButtonContainer();
         this.uiElement.createSuggestButton(this.buttonContainer, value);
-        guiUtils.hSpace(this.buttonContainer, NumberButton.spaceWidth);
+        guiUtils.hSpace(this.buttonContainer, Integer.spaceWidth);
     } else {
         console.error('ParamController.createSuggestButton: Only for "number" controllers. Type of this controller: "' + this.type + '"');
     }
@@ -1078,7 +1133,7 @@ ParamController.prototype.createSmallRange = function() {
         this.setupButtonContainer();
         this.uiElement.createRange(this.buttonContainer);
         this.uiElement.setRangeWidth(this.design.rangeSliderLengthShort);
-        guiUtils.hSpace(this.buttonContainer, NumberButton.spaceWidth);
+        guiUtils.hSpace(this.buttonContainer, Integer.spaceWidth);
     } else {
         console.error('ParamController.createSmallRange: Only for "number" controllers. Type of this controller: "' + this.type + '"');
     }

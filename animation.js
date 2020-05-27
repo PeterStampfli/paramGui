@@ -68,6 +68,7 @@ animation.createUI = function(gui) {
         labelText: 'speed (fps)',
         max: 60,
         min: 0.2,
+        step: 0.1,
     });
     // shows the frame number while animation runs, or while waiting
     // can advance the frame number if animation is not running

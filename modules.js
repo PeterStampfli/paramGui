@@ -77,19 +77,9 @@ export {
 from "./textInput.js";
 
 export {
-    Integer
+    RealNumber
 }
-from "./integer.js";
-
-export {
-    FixedPoint
-}
-from "./fixedPoint.js";
-
-export {
-    FloatingPoint
-}
-from "./floatingPoint.js";
+from "./realNumber.js";
 
 export {
     Select

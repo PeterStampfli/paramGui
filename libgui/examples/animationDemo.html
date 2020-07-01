@@ -25,6 +25,7 @@ const gui = new ParamGui({
     closed:false
 });
 
+output.drawCanvasChanged=function(){};
 output.createCanvas(gui,'canvas control');
 const canvas = output.canvas;
 const canvasContext = canvas.getContext('2d');
@@ -63,7 +64,7 @@ anim.reset = function() {
     x = 0;
 };
 
-output.draw=anim.draw;
+output.showCanvasChanged=anim.draw;
 
 animation.setObject(anim);
 anim.reset();

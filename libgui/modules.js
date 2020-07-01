@@ -26,6 +26,11 @@ export {
 from "./mouseEvents.js";
 
 export {
+    keyboard
+}
+from "./keyboard.js";
+
+export {
     TouchEvents
 }
 from "./touchEvents.js";
@@ -102,9 +107,24 @@ export {
 from "./imageSelect.js";
 
 export {
+    Pixels
+}
+from "./pixels.js";
+
+export {
     output
 }
 from "./output.js";
+
+export {
+    CoordinateTransform
+}
+from "./coordinateTransform.js";
+
+export {
+    map
+}
+from "./map.js";
 
 export {
     animation

@@ -7,6 +7,9 @@
 
 import {
     guiUtils,
+    CoordinateTransform,
+    MouseEvents,
+    keyboard,
     ParamGui
 }
 from "./modules.js";
@@ -16,25 +19,30 @@ export const output = {};
 // doing both canvas and div together simplifies things
 
 output.canvas = false;
+output.canvasContext = false; // 2d-context
 output.div = false;
 output.divHeight = 0;
 output.divWidth = 0;
 
 /**
- * a method to (re)draw the canvas upon resize and so on
- * define your own to get your image
- * call it after initialization to get a first image
- * to avoid flickering use in the beginning output.draw = function(){};
- * @method output.draw
+ * draw the output image when the canvas changes (size or transform)
+ * define your own method to get your image
+ * call it after initialization of everything to get a first image
+ * @method output.drawCanvasChange
  */
-output.draw = function() {
-    const canvas = output.canvas;
-    const context = output.canvas.getContext('2d');
-    context.fillStyle = 'blue';
-    context.fillRect(0, 0, output.canvas.width, output.canvas.height);
-    context.fillStyle = 'white';
-    context.font = Math.round(canvas.height / 20) + 'px FreeSans';
-    context.fillText('Please define the output.draw() method!', canvas.width / 20, canvas.height / 2, canvas.width * 0.9);
+output.drawCanvasChanged = function() {
+    console.error('Please define method output.drawCanvasChanged!');
+    console.log('You can hide this message by using before calling output.createCanvas():');
+    console.log('output.drawCanvasChanged=function(){};');
+};
+
+/**
+ * draw output image when grid parameters change
+ * kaleidoscopes: the map remains the same, do same as when image changes
+ * @method output.drawGridChanged()
+ */
+output.drawGridChanged = function() {
+    console.error('Please define method output.drawGridChanged!');
 };
 
 /**
@@ -103,17 +111,12 @@ function rightSpaceLimit() {
  * NOTE: changing the canvas size sets canvasAutoResize to false, requires redraw and checking of scroll bars
  */
 
-
-// show that the window has been loaded
-output.windowLoaded = false;
-
 /**
  * resizing the output div, called by window.onResize upon window onload
  * @method resizeOutputDiv
  */
 function resizeOutputDiv() {
     var leftOfSpace, widthOfSpace;
-    output.windowLoaded = true;
     if (extendCanvasController.getValue()) {
         leftOfSpace = 0;
         widthOfSpace = window.innerWidth;
@@ -162,34 +165,44 @@ output.saveCanvasAsFile = function(filename, type = 'png') {
     }
 };
 
+// if autoresize is on:
 // resizing after the output.div has been resized, knowing its new dimensions
-function autoResize() {
-    const oldWidth = widthController.getValue();
-    const oldHeight = heightController.getValue();
+// draws output if outoresize is on and size changes
+// if autoscale is on: adjust size of canvas image, the canvas itself does not change, no redraw
+// else adjust scroll bars
+// redraw if canvas dimensions changed since last call
+// (re)draw at first call
+let oldWidth = 0;
+let oldHeight = 0;
+
+function autoResizeDraw() {
     if (autoResizeController.getValue()) {
+        // autoresize: fit canvas into the output.div. thus no scroll bars
         output.canvas.style.width = '';
         output.canvas.style.height = '';
-        // autoresize: fit canvas into the output.div. thus no scroll bars
         output.div.style.overflow = "hidden";
         var newWidth, newHeight;
         if (canvasWidthToHeight > 0.0001) {
             if (output.divWidth / output.divHeight > canvasWidthToHeight) {
-                // very elongated div: its height determines canvas dimensions
-                newWidth = Math.round(output.divHeight * canvasWidthToHeight);
+                // elongated div: its height determines canvas dimensions
+                newWidth = Math.floor(output.divHeight * canvasWidthToHeight);
                 newHeight = output.divHeight;
             } else {
+                // narrow div: its width determines canvas dimensions
                 newWidth = output.divWidth;
-                newHeight = Math.round(output.divWidth / canvasWidthToHeight);
+                newHeight = Math.floor(output.divWidth / canvasWidthToHeight);
             }
         } else {
             newWidth = output.divWidth;
             newHeight = output.divHeight;
         }
-        if ((oldWidth !== newWidth) || (oldHeight !== newHeight)) {
-            // only if the true canvas dimensions change then we need to redraw
+        // only if the true canvas dimensions change then we need to redraw
+        // controllers directly change canvas dimensions
+        if (oldWidth !== newWidth) {
             widthController.setValueOnly(newWidth);
+        }
+        if (oldHeight !== newHeight) {
             heightController.setValueOnly(newHeight);
-            output.draw();
         }
     } else if (autoScaleController.getValue()) {
         var scale;
@@ -223,6 +236,18 @@ function autoResize() {
             }
         }
     }
+    // draw if dimensions changed
+    if ((oldWidth !== output.canvas.width) || (oldHeight !== output.canvas.height)) {
+        oldWidth = output.canvas.width;
+        oldHeight = output.canvas.height;
+        // if there is a transform we have to update ...
+        if (guiUtils.isDefined(output.coordinateTransform)) {
+            // prescaling: makes that for square canvas x- and y-axis range from 0 to 1
+            output.coordinateTransform.setPrescale(1 / Math.sqrt(output.canvas.width * output.canvas.height));
+            output.coordinateTransform.updateTransform();
+        }
+        output.drawCanvasChanged();
+    }
 }
 
 /**
@@ -242,6 +267,7 @@ output.createCanvas = function(gui, folderName) {
         return;
     }
     output.canvas = document.createElement("canvas");
+    output.canvasContext = output.canvas.getContext("2d");
     if (guiUtils.isDefined(folderName)) {
         gui = gui.addFolder(folderName);
     }
@@ -273,7 +299,7 @@ output.createCanvas = function(gui, folderName) {
     widthController = gui.add({
         type: "number",
         max: 10000,
-        step:1,
+        step: 1,
         params: output.canvas,
         property: "width",
         onChange: function(value) {
@@ -282,15 +308,14 @@ output.createCanvas = function(gui, folderName) {
                 heightController.setValueOnly(value / canvasWidthToHeight);
             }
             autoResizeController.setValueOnly(false);
-            output.draw();
-            autoResize();
+            autoResizeDraw();
         }
     });
     widthController.hSpace(30);
     heightController = widthController.add({
         type: "number",
         max: 10000,
-        step:1,
+        step: 1,
         params: output.canvas,
         property: "height",
         onChange: function(value) {
@@ -299,8 +324,7 @@ output.createCanvas = function(gui, folderName) {
                 widthController.setValueOnly(value * canvasWidthToHeight);
             }
             autoResizeController.setValueOnly(false);
-            output.draw();
-            autoResize();
+            autoResizeDraw();
         }
     });
 
@@ -312,7 +336,7 @@ output.createCanvas = function(gui, folderName) {
             if (on) {
                 autoScaleController.setValueOnly(false);
             }
-            autoResize();
+            autoResizeDraw();
         }
     }).addHelp("Sets the canvas dimensions to fit the available space.");
 
@@ -324,7 +348,7 @@ output.createCanvas = function(gui, folderName) {
             if (on) {
                 autoResizeController.setValueOnly(false);
             }
-            autoResize();
+            autoResizeDraw();
         }
     }).addHelp('Scales the image of the canvas to fit the available space.');
 
@@ -335,11 +359,12 @@ output.createCanvas = function(gui, folderName) {
         labelText: 'extend canvas width',
         onChange: function() {
             resizeOutputDiv();
-            autoResize();
+            autoResizeDraw();
         }
     }).addHelp('Extend the canvas width to window width. Maybe, nothing happens for fixed width to height ratio.');
 
     // extending the browser window to the entire screen
+    // the output div andd canvas resize because of the window.onresize event
     gui.add({
         type: 'boolean',
         labelText: 'full screen window',
@@ -357,16 +382,8 @@ output.createCanvas = function(gui, folderName) {
         output.createDiv();
     }
     output.div.appendChild(output.canvas);
-    autoResize();
-    window.addEventListener("resize", autoResize, false);
-};
-
-/**
- * autoresizing the canvas, required after changing the width to size ratio
- * @method output.resizeCanvas
- */
-output.resizeCanvas = function() {
-    autoResize();
+    autoResizeDraw();
+    window.addEventListener("resize", autoResizeDraw, false);
 };
 
 /**
@@ -380,7 +397,7 @@ output.resizeCanvas = function() {
 // this parameter will be set by the program, not the user
 let canvasWidthToHeight = -1;
 
-output.setCanvasWidthToHeight = function(ratio) {
+output.setCanvasWidthToHeight = function(ratio = 1) {
     if (Math.abs(canvasWidthToHeight - ratio) > 0.0001) { // do this only if ratio changes, thus always 
         canvasWidthToHeight = ratio;
         if (ratio > 0.0001) {
@@ -391,7 +408,7 @@ output.setCanvasWidthToHeight = function(ratio) {
                 widthController.setValueOnly(width);
                 heightController.setValueOnly(width / canvasWidthToHeight);
             }
-            autoResize();
+            autoResizeDraw();
         }
     }
 };
@@ -405,14 +422,9 @@ output.setCanvasWidthToHeight = function(ratio) {
  * @param {int} stepHorizontal - optional, default is stepHorizontal
  */
 output.setCanvasDimensionsStepsize = function(stepVertical, stepHorizontal = stepVertical) {
-    const oldWidth = output.canvas.width;
-    const oldHeight = output.canvas.height;
-    widthController.setStep(stepVertical);
+    widthController.setStep(stepVertical); // might resize output.canvas.width
     heightController.setStep(stepHorizontal);
-    if ((oldWidth !== output.canvas.width) || (oldHeight !== output.canvas.height)) {
-        output.draw();
-    }
-    autoResize();
+    autoResizeDraw();
 };
 
 /**
@@ -446,8 +458,7 @@ function makeArgs(buttonDefinition) {
             } else {
                 heightController.setValueOnly(guiUtils.check(buttonDefinition.height, buttonDefinition.width));
             }
-            output.draw();
-            autoResize();
+            autoResizeDraw();
         };
     } else {
         result.buttonText = buttonDefinition.label;
@@ -466,4 +477,243 @@ output.makeCanvasSizeButtons = function(gui, buttonDefinition) {
     for (var i = 2; i < arguments.length; i++) {
         controller.add(makeArgs(arguments[i]));
     }
+};
+
+/**
+ * add a coordinate transform to the canvas
+ * add mouse events to change the visible part (-> changes transform)
+ * ctrl-key allows for other actions, Shift key changes wheel action to rotation
+ * @method output.addCoordinateTransform
+ * @param {ParamGui} gui - for the transform UI elements
+ * @param {boolean} withRotation - optional, default is false
+ */
+output.addCoordinateTransform = function(gui, withRotation = false) {
+    output.withRotation = withRotation;
+    output.coordinateTransform = gui.addCoordinateTransform(output.canvas, withRotation);
+    const coordinateTransform = output.coordinateTransform;
+    coordinateTransform.setPrescale(1 / Math.sqrt(output.canvas.width * output.canvas.height));
+    coordinateTransform.updateTransform();
+    let helpText = 'The values of "translateX" and "Y" are the coordinates of the upper left image corner.';
+    helpText += '<br>The value of "scale" is the mean range of the image along the coordinate x- and y-axis.';
+    helpText += '<br>Drag the mouse on the image to move it. Change the scale with the mouse wheel.';
+    coordinateTransform.addHelp(helpText);
+    output.coordinateTransform.onChange = function() {
+        output.drawCanvasChanged(); // this calls always the latest version
+    };
+    output.canvas.style.cursor = "pointer";
+    output.mouseEvents = new MouseEvents(output.canvas);
+    const mouseEvents = output.mouseEvents;
+    // mouse wheel zooming factor
+    output.zoomFactor = 1.04;
+    // and rotating, angle step, in degrees
+    output.angleStep = 1;
+    // vectors for intermediate results
+    const u = {
+        x: 0,
+        y: 0
+    };
+    const v = {
+        x: 0,
+        y: 0
+    };
+    // other actions (right mouse button pressed) 
+    // than changing the transform/view (left mouse button pressed)
+    output.mouseDownAction = function(mouseEvents) {}; // mouse down 
+    output.mouseDragAction = function(mouseEvents) {}; // mouse drag (move with button pressed)
+    output.mouseMoveAction = function(mouseEvents) {}; // mouse move (move with button released)
+    output.mouseUpAction = function(mouseEvents) {}; // mouse up
+    output.mouseOutAction = function(mouseEvents) {}; // mouse out (leave)
+    output.mouseWheelAction = function(mouseEvents) {}; // mouse wheel or keyboard keys
+
+    // change the transform or do something else
+    mouseEvents.downAction = function() {
+        if (keyboard.ctrlPressed) {
+            output.mouseDownAction(mouseEvents);
+        }
+    };
+    mouseEvents.dragAction = function() {
+        if (keyboard.ctrlPressed) {
+            output.mouseDragAction(mouseEvents);
+        } else {
+            v.x = mouseEvents.dx;
+            v.y = mouseEvents.dy;
+            coordinateTransform.rotateScale(v);
+            coordinateTransform.shiftX -= v.x;
+            coordinateTransform.shiftY -= v.y;
+            coordinateTransform.updateUI();
+            coordinateTransform.updateTransform();
+            output.drawCanvasChanged();
+        }
+    };
+    mouseEvents.moveAction = function() {
+        if (keyboard.ctrlPressed) {
+            output.mouseMoveAction(mouseEvents);
+        }
+    };
+    mouseEvents.upAction = function() {
+        if (keyboard.ctrlPressed) {
+            output.mouseUpAction(mouseEvents);
+        }
+    };
+    mouseEvents.outAction = function() {
+        if (keyboard.ctrlPressed) {
+            output.mouseOutAction(mouseEvents);
+        }
+    };
+    mouseEvents.wheelAction = function() {
+        if (keyboard.ctrlPressed) {
+            output.mouseWheelAction(mouseEvents);
+        } else {
+            // the zoom center, prescaled
+            u.x = mouseEvents.x;
+            u.y = mouseEvents.y;
+            v.x = u.x;
+            v.y = u.y;
+            coordinateTransform.rotateScale(u);
+            if (keyboard.shiftPressed && output.withRotation) {
+                const step = (mouseEvents.wheelDelta > 0) ? output.angleStep : -output.angleStep;
+                coordinateTransform.angle += step;
+            } else {
+                const zoomFactor = (mouseEvents.wheelDelta > 0) ? output.zoomFactor : 1 / output.zoomFactor;
+                coordinateTransform.scale *= zoomFactor;
+            }
+            coordinateTransform.updateTransform();
+            coordinateTransform.rotateScale(v);
+            coordinateTransform.shiftX += u.x - v.x;
+            coordinateTransform.shiftY += u.y - v.y;
+            coordinateTransform.updateUI();
+            coordinateTransform.updateTransform();
+            output.drawCanvasChanged();
+        }
+    };
+};
+
+/**
+ * change initial coordinate axis ranges:
+ * define coordinate values (centerX, centerY) at center of image
+ * define range for square canvas, mean value for rectangular canvas
+ * @method output.setInitialCoordinates
+ * @param {number} centerX
+ * @param {number} centerY
+ * @param {number} range
+ */
+output.setInitialCoordinates = function(centerX, centerY, range) {
+    const coordinateTransform = output.coordinateTransform;
+    const canvasScale = 1 / Math.sqrt(output.canvas.width * output.canvas.height);
+    const shiftX = centerX - 0.5 * output.canvas.width * canvasScale * range;
+    const shiftY = centerY - 0.5 * output.canvas.height * canvasScale * range;
+    coordinateTransform.setValues(shiftX, shiftY, range, 0);
+    coordinateTransform.setResetValues();
+};
+
+/**
+ * set the line width in pixels, independent of scale
+ * compensate for the scaling of the inverse transform: multiply with scale of forward transform
+ * @method output.setLineWidth
+ * @param{number} width
+ */
+output.setLineWidth = function(width) {
+    output.canvasContext.lineWidth = width * output.coordinateTransform.totalScale;
+};
+
+/**
+ * add a grid to the canvas
+ * @method output.addGrid
+ * @param {ParamGui} gui
+ */
+const grid = {};
+grid.on = true;
+grid.interval = 1;
+grid.color = '#000000';
+grid.axisWidth = 6;
+grid.lineWidth = 3;
+
+output.addGrid = function(gui) {
+    const onOffController = gui.add({
+        type: 'boolean',
+        params: grid,
+        property: 'on',
+        labelText: '',
+        onChange: function() {
+            output.drawGridChanged();
+        }
+    });
+    const intervalController = onOffController.add({
+        type: 'number',
+        params: grid,
+        property: 'interval',
+        step: 0.1,
+        min: 0.1,
+        onChange: function() {
+            output.drawGridChanged();
+        }
+    });
+    const colorController = gui.add({
+        type: 'color',
+        params: grid,
+        property: 'color',
+        onChange: function() {
+            output.drawGridChanged();
+        }
+    });
+};
+
+/**
+ * draw the grid, no rotation
+ * @method output.drawGrid
+ */
+output.drawGrid = function() {
+    if (grid.on) {
+        const canvasContext = output.canvasContext;
+        canvasContext.strokeStyle = grid.color;
+        // canvas limits to coordinate space limits, from transformation of corners
+        const v = {};
+        v.x = 0;
+        v.y = 0;
+        output.coordinateTransform.transform(v);
+        const xMin = v.x;
+        const yMin = v.y;
+        v.x = output.canvas.width;
+        v.y = output.canvas.height;
+        output.coordinateTransform.transform(v);
+        const xMax = v.x;
+        const yMax = v.y;
+        // axis
+        output.setLineWidth(grid.axisWidth);
+        canvasContext.beginPath();
+        canvasContext.moveTo(xMin, 0);
+        canvasContext.lineTo(xMax, 0);
+        canvasContext.moveTo(0, yMin);
+        canvasContext.lineTo(0, yMax);
+        canvasContext.stroke();
+        //grid lines
+        output.setLineWidth(grid.lineWidth);
+        const iMax = Math.floor(xMax / grid.interval);
+        for (let i = Math.floor(xMin / grid.interval + 1); i <= iMax; i++) {
+            canvasContext.beginPath();
+            canvasContext.moveTo(i * grid.interval, yMin);
+            canvasContext.lineTo(i * grid.interval, yMax);
+            canvasContext.stroke();
+        }
+        const jMax = Math.floor(yMax / grid.interval);
+        for (let j = Math.floor(yMin / grid.interval + 1); j <= jMax; j++) {
+            canvasContext.beginPath();
+            canvasContext.moveTo(xMin, j * grid.interval);
+            canvasContext.lineTo(xMax, j * grid.interval);
+            canvasContext.stroke();
+        }
+    }
+};
+
+/**
+ * clear the canvas (for line drawings ...)
+ * preserves the current transform
+ * call updateTransform afterwards
+ * @method output.clearCanvas
+ */
+output.clearCanvas = function() {
+    const transform = output.canvasContext.getTransform();
+    output.canvasContext.setTransform(1, 0, 0, 1, 0, 0); // reset transform
+    output.canvasContext.clearRect(0, 0, output.canvas.width, output.canvas.height);
+    output.canvasContext.setTransform(transform);
 };

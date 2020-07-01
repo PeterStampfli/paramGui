@@ -13,6 +13,8 @@ const gui = new ParamGui({
     name: "abyss controls"
 });
 
+output.drawCanvasChanged=function(){};
+
 output.createCanvas(gui);
 const canvas = output.canvas;
 const canvasContext = canvas.getContext("2d");
@@ -116,5 +118,5 @@ function draw() {
     canvasContext.putImageData(imageData, 0, 0);
 }
 
-output.draw = draw;
+output.drawCanvasChanged = draw;
 draw();

@@ -42,7 +42,8 @@ import {
     ParamController,
     Button,
     InstantHelp,
-    Logger
+    Logger,
+    CoordinateTransform
 } from "./modules.js";
 
 export function ParamGui(params) {
@@ -247,7 +248,7 @@ ParamGui.defaultDesign = {
     // fontsize for buttons
     buttonFontSize: 12,
     // minimum width for ui elements
-    minElementWidth:0,
+    minElementWidth: 0,
     // width of boolean buttons
     booleanButtonWidth: 60,
     // width for text input
@@ -636,7 +637,7 @@ ParamGui.prototype.hide = function() {
  * @param {boolean} isActive
  */
 ParamGui.prototype.setActive = function(isActive) {
-       this.elements.forEach(element => element.setActive(isActive));
+    this.elements.forEach(element => element.setActive(isActive));
 };
 
 /**
@@ -892,7 +893,7 @@ ParamGui.combineObject = function(obs) {
     // check if all args fields are good parameters
     if (guiUtils.isObject(result)) {
         for (var key in result) {
-            if ((goodArgsKeys.indexOf(key) < 0)&& (!guiUtils.isDefined(ParamGui.defaultDesign[key]))){
+            if ((goodArgsKeys.indexOf(key) < 0) && (!guiUtils.isDefined(ParamGui.defaultDesign[key]))) {
                 console.error('arguments object has unknown parameter "' + key + '" with value "' + result[key] + '"');
                 let mess = "good parameters are: ";
                 for (i = 0; i < goodArgsKeys.length; i++) {
@@ -971,6 +972,7 @@ let goodArgsKeys = ["type",
     "buttonText",
     "onChange",
     "onClick",
+    "onInteraction",
     "options",
     "min",
     "max",
@@ -1080,6 +1082,19 @@ ParamGui.prototype.addLogger = function() {
 };
 
 /**
+ * add a transformation of coordinates
+ * shift and scaling, optional rotation
+ * @method ParamGui#addCoordinateTransform
+* @param {canvas} canvas - optional, default==null, transform applies to canvas context
+ * @param {boolean} withRotation - optional, default==false
+ * @param {float} stepSize - optional, step size for UI, default is 0.001 * @return coordinateTransform object
+ */
+ParamGui.prototype.addCoordinateTransform = function(canvas=null,withRotation = false, stepSize = 0.001) {
+    const coordinateTransform = new CoordinateTransform(this,canvas, withRotation,stepSize);
+    return coordinateTransform;
+};
+
+/**
  * add a div to make a vertical space
  * choose height (default: paddingVertical)
  * backgroundColor: (default: none )
@@ -1104,7 +1119,7 @@ ParamGui.prototype.addVerticalSpace = function(height, backgroundColor) {
 /**
  * add a "paragraph" (its actually a div with optional inner html)
  * text wraps automatically (rewraps if scroll bar appears)
- * @method ParamGui#paragraph
+ * @method ParamGui#addParagraph
  * @param {String} text - with HTML markup (=>innerHTML)
  * @return the html <p> element, for futher formatting, in case
  */
@@ -1120,6 +1135,16 @@ ParamGui.prototype.addParagraph = function(innerHTML) {
     para.innerHTML = innerHTML;
     this.bodyDiv.appendChild(para);
     return para;
+};
+
+/**
+ * add a title in boldface
+ * @method ParamGui#addTitle
+ * @param {String} text - with HTML markup (=>innerHTML)
+ * @return the html <p> element, for futher formatting, in case
+ */
+ParamGui.prototype.addTitle = function(innerHTML) {
+    this.addParagraph('<strong>' + innerHTML + '</strong>');
 };
 
 /**

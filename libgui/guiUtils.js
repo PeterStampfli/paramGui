@@ -401,29 +401,7 @@ guiUtils.displayInlineBlock = function(element) {
  * @return number, (inverted) y-coordinate of top 
  */
 guiUtils.topPosition = function(theElement) {
-    const body = document.body;
-    // sum of offsets, going only through offsetParents
-    let offsetY = 0;
-    let element = theElement;
-    while (element !== body) {
-        offsetY += element.offsetTop;
-        if (element.style.position == "fixed") {
-            offsetY += window.pageYOffset;
-            break;
-        }
-        element = element.offsetParent; // important: does not double count offsetTop
-    }
-    // sum of scrolls, going through all parents
-    let scrollY = 0;
-    element = theElement;
-    while (element !== body) {
-        scrollY += element.scrollTop;
-        if (element.style.position == "fixed") {
-            break;
-        }
-        element = element.parentElement; // important: does not double count offsetTop
-    }
-    return offsetY - scrollY;
+    return theElement.getBoundingClientRect().top+window.pageYOffset;
 };
 
 //================================================================================
@@ -464,5 +442,35 @@ guiUtils.saveCanvasAsFile = function(canvas, filename, extension, callback = fun
             saveBlobAsFile(blob, filename + '.jpg');
             callback();
         }, 'image/jpeg');
+    }
+};
+
+// check byte order of the machine
+//=================================================
+
+// byte order is important for putting color components in a 32 bit integer
+
+const abgr = new Int8Array(4);
+const intColor = new Int32Array(abgr.buffer);
+abgr[0] = 3; // the red byte, all others are 0
+
+// use as flag to choose the correct method
+// tests if the [a,b,g,r] byte array as 32 bit integer is equal to 3 for a,b,g=0 and r=3
+// thus the r(ed) byte (value 3) with lowest index has to be packed into the least significant byte of 32 bit integers
+guiUtils.abgrOrder = (intColor[0] === 3);
+
+// array things
+//===================================
+
+/**
+ * repeat first n elements of an array until it is filled
+ * @method guiUtils.arrayRepeat
+ * @param {Array} array
+ * @params {integer} n
+ */
+guiUtils.arrayRepeat = function(array, n) {
+    const length = array.length;
+    for (var i = n; i < length; i++) {
+        array[i] = array[i - n];
     }
 };

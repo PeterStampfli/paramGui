@@ -74,12 +74,21 @@ export function ParamController(gui, domElement, argObjects) {
     }
 
     /**
-     * default callback for changes
+     * default callback for changes/click
+     * NOTE: cannot use name 'onChange' for compatibility with datgui
      * @method ParamController#callback
      * @param {anything} value
      */
     this.callback = function(value) {
         // console.log("callback value " + value);
+    };
+
+    /**
+     * default action for click on a controller (interaction)
+     * @method ParamController#interaction
+     */
+    this.interaction = function() {
+        // console.log("interaction");
     };
 
     // get callback from different arguments. For a button it might be the (initial) parameter value. A button never has a parameter.
@@ -89,6 +98,7 @@ export function ParamController(gui, domElement, argObjects) {
     } else if (args.type !== "textarea") { // textarea has no onChange event, thus no callback
         this.callback = guiUtils.check(args.onChange, args.onClick, this.callback);
     }
+    this.interaction = guiUtils.check(args.onInteraction, this.interaction);
     // get label text, button is special: the property might be the button text but not the label text
     var labelText, buttonText;
     if (args.type === "button") {
@@ -254,7 +264,6 @@ export function ParamController(gui, domElement, argObjects) {
                 break;
             case "number":
                 let realNumber = new RealNumber(this.domElement);
-
                 this.uiElement = realNumber;
                 this.setupOnChange();
                 this.setupOnInteraction();
@@ -446,6 +455,7 @@ ParamController.prototype.setupOnInteraction = function() {
         } else {
             ParamGui.closePopups();
         }
+        controller.interaction();
     };
 };
 
@@ -552,6 +562,18 @@ ParamController.prototype.addOption = function(name, value = name) {
 // if the value of the param object changes, then update the ui with updateDisplay
 
 /**
+ * update parameter value if there is a params object
+ * only if the value changes (in case the parameter object is canvas, setting dimensions clears the canvas even if the value does not change ???)
+ * @method ParamController#updateParams
+ */
+ParamController.prototype.updateParams = function() {
+    const value = this.uiElement.getValue();
+    if ((this.hasParameter) && (this.params[this.property] !== value)) {
+        this.params[this.property] = value;
+    }
+};
+
+/**
  * updates display and set the value of the param object field if it exists
  * the ui element checks the value and may change it if it is not consistent with the controller type
  * DOES NOT call the callback(), which might result in wasted work
@@ -563,9 +585,8 @@ ParamController.prototype.addOption = function(name, value = name) {
 ParamController.prototype.setValueOnly = function(value) {
     if (this.uiElement) {
         this.uiElement.setValue(value);
-        if (this.hasParameter) {
-            this.params[this.property] = this.uiElement.getValue();
-        } else if ((this.type === "color") && guiUtils.isObject(this.colorObject)) {
+        this.updateParams();
+        if ((this.type === "color") && guiUtils.isObject(this.colorObject)) {
             ColorInput.setObject(this.colorObject, this.uiElement.getValue());
         }
     } else {
@@ -839,7 +860,8 @@ ParamController.prototype.deleteLabel = function() {
 //===================================================
 
 /**
- * set a new minimum value for the number range
+ * set/change a new minimum value for the number range
+ * may change parameter value
  * @method ParamController#setMin
  * @param {number} value
  * @return this controller
@@ -847,6 +869,7 @@ ParamController.prototype.deleteLabel = function() {
 ParamController.prototype.setMin = function(value) {
     if (this.type === "number") {
         this.uiElement.setMin(value);
+        this.updateParams();
     } else {
         console.error('ParamController.setMin: Only for "number" controllers. Type of this controller: "' + this.type + '"');
     }
@@ -854,7 +877,8 @@ ParamController.prototype.setMin = function(value) {
 };
 
 /**
- * set a new maximum value for the number range
+ * set/change a new maximum value for the number range
+ * may change parameter value
  * @method ParamController#setMax
  * @param {number} value
  * @return this controller
@@ -862,6 +886,7 @@ ParamController.prototype.setMin = function(value) {
 ParamController.prototype.setMax = function(value) {
     if (this.type === "number") {
         this.uiElement.setMax(value);
+        this.updateParams();
     } else {
         console.error('ParamController.setMax: Only for "number" controllers. Type of this controller: "' + this.type + '"');
     }
@@ -869,7 +894,8 @@ ParamController.prototype.setMax = function(value) {
 };
 
 /**
- * set a step value for the number range
+ * set/change a step value for the number range
+ * may change parameter value
  * @method ParamController#setStep
  * @param {number} value
  * @return this controller
@@ -877,6 +903,7 @@ ParamController.prototype.setMax = function(value) {
 ParamController.prototype.setStep = function(value) {
     if (this.type === "number") {
         this.uiElement.setStep(value);
+        this.updateParams();
     } else {
         console.error('ParamController.setStep: Only for "number" controllers. Type of this controller: "' + this.type + '"');
     }
@@ -1167,6 +1194,7 @@ ParamController.prototype.createVeryLongRange = function() {
 ParamController.prototype.cyclic = function() {
     if (this.type === "number") {
         this.uiElement.setCyclic();
+        this.updateParams();
     } else {
         console.error('ParamController.cyclic: Only for "number" controllers. Type of this controller: "' + this.type + '"');
     }

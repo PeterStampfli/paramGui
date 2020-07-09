@@ -9,7 +9,6 @@ import {
     guiUtils,
     CoordinateTransform,
     MouseEvents,
-    keyboard,
     ParamGui
 }
 from "./modules.js";
@@ -174,6 +173,8 @@ output.saveCanvasAsFile = function(filename, type = 'png') {
 // (re)draw at first call
 let oldWidth = 0;
 let oldHeight = 0;
+// initially do not draw
+let isDrawing = false;
 
 function autoResizeDraw() {
     if (autoResizeController.getValue()) {
@@ -246,7 +247,9 @@ function autoResizeDraw() {
             output.coordinateTransform.setPrescale(1 / Math.sqrt(output.canvas.width * output.canvas.height));
             output.coordinateTransform.updateTransform();
         }
-        output.drawCanvasChanged();
+        if (isDrawing) {
+            output.drawCanvasChanged();
+        }
     }
 }
 
@@ -390,7 +393,7 @@ output.createCanvas = function(gui, folderName) {
  * set the canvasWidthToHeight, does not yet resize the canvas
  * if value<0: no fixed ratio
  * if value>0...1: fixed ratio
- * CALL output.resize and draw later (particularly in initialization...)
+ * CALL output.resizeCanvasDraw later
  * @method output.setCanvasWidthToHeight
  * @param {float} ratio
  */
@@ -408,9 +411,19 @@ output.setCanvasWidthToHeight = function(ratio = 1) {
                 widthController.setValueOnly(width);
                 heightController.setValueOnly(width / canvasWidthToHeight);
             }
-            autoResizeDraw();
         }
+        autoResizeDraw();
     }
+};
+
+/**
+ * draw and enable drawing at resizing
+ * call when drawing has been defined
+ * @method output.resizeCanvasDraw
+ */
+output.firstDrawing = function() {
+    isDrawing = true;
+    output.drawCanvasChanged();
 };
 
 /**
@@ -516,8 +529,7 @@ output.addCoordinateTransform = function(gui, withRotation = false) {
         x: 0,
         y: 0
     };
-    // other actions (right mouse button pressed) 
-    // than changing the transform/view (left mouse button pressed)
+    // other actions (ctrl-key pressed) than changing the transform/view
     output.mouseDownAction = function(mouseEvents) {}; // mouse down 
     output.mouseDragAction = function(mouseEvents) {}; // mouse drag (move with button pressed)
     output.mouseMoveAction = function(mouseEvents) {}; // mouse move (move with button released)
@@ -527,12 +539,12 @@ output.addCoordinateTransform = function(gui, withRotation = false) {
 
     // change the transform or do something else
     mouseEvents.downAction = function() {
-        if (keyboard.ctrlPressed) {
+        if (mouseEvents.ctrlPressed) {
             output.mouseDownAction(mouseEvents);
         }
     };
     mouseEvents.dragAction = function() {
-        if (keyboard.ctrlPressed) {
+        if (mouseEvents.ctrlPressed) {
             output.mouseDragAction(mouseEvents);
         } else {
             v.x = mouseEvents.dx;
@@ -546,22 +558,22 @@ output.addCoordinateTransform = function(gui, withRotation = false) {
         }
     };
     mouseEvents.moveAction = function() {
-        if (keyboard.ctrlPressed) {
+        if (mouseEvents.ctrlPressed) {
             output.mouseMoveAction(mouseEvents);
         }
     };
     mouseEvents.upAction = function() {
-        if (keyboard.ctrlPressed) {
+        if (mouseEvents.ctrlPressed) {
             output.mouseUpAction(mouseEvents);
         }
     };
     mouseEvents.outAction = function() {
-        if (keyboard.ctrlPressed) {
+        if (mouseEvents.ctrlPressed) {
             output.mouseOutAction(mouseEvents);
         }
     };
     mouseEvents.wheelAction = function() {
-        if (keyboard.ctrlPressed) {
+        if (mouseEvents.ctrlPressed) {
             output.mouseWheelAction(mouseEvents);
         } else {
             // the zoom center, prescaled
@@ -570,7 +582,7 @@ output.addCoordinateTransform = function(gui, withRotation = false) {
             v.x = u.x;
             v.y = u.y;
             coordinateTransform.rotateScale(u);
-            if (keyboard.shiftPressed && output.withRotation) {
+            if (mouseEvents.shiftPressed && output.withRotation) {
                 const step = (mouseEvents.wheelDelta > 0) ? output.angleStep : -output.angleStep;
                 coordinateTransform.angle += step;
             } else {
@@ -605,6 +617,67 @@ output.setInitialCoordinates = function(centerX, centerY, range) {
     coordinateTransform.setValues(shiftX, shiftY, range, 0);
     coordinateTransform.setResetValues();
 };
+
+/*
+ * transform mouse event data to calculation coordinates
+ * position with shift, change of position scale and rotation only
+ */
+const dPosition = {};
+
+function transformMouseEvents(mouseEvents) {
+    output.coordinateTransform.transform(mouseEvents);
+    dPosition.x = mouseEvents.dx;
+    dPosition.y = mouseEvents.dy;
+    output.coordinateTransform.rotateScale(dPosition);
+    mouseEvents.dx = dPosition.x;
+    mouseEvents.dy = dPosition.y;
+}
+
+/**
+ * alternative approach to ctrl-mouse actions with a list of objects
+ * objects can have actions and shift-actions methods
+ * doing objects with fitting method until method returns true
+ * Methods: mouseDownAction, mouseDragAction, mouseMoveAction, mouseUpAction, mouseWheelAction, mouseOutAction
+ * Methods: mouseDownShiftAction, mouseDragShiftAction, mouseMoveShiftAction, mouseUpShiftAction, mouseWheelShiftAction, mouseOutShiftAction
+ * mouse event position data is transformed to computational space
+ * @method output.useCtrlObjects
+ * @param {Array of Objects} ctrlObjects
+ */
+output.useCtrlObjects = function(ctrlObjects) {
+
+    function createCtrlEvents(action, shiftAction) {
+        output[action] = function(mouseEvents) {
+            transformMouseEvents(mouseEvents);
+            const length = ctrlObjects.length;
+            for (var i = 0; i < length; i++) {
+                if (mouseEvents.shiftPressed) {
+                    if (guiUtils.isFunction(ctrlObjects[i][shiftAction])) {
+                        if (ctrlObjects[i][shiftAction](mouseEvents)) {
+                            return;
+                        }
+                    }
+                } else {
+                    if (guiUtils.isFunction(ctrlObjects[i][action])) {
+                        if (ctrlObjects[i][action](mouseEvents)) {
+                            return;
+                        }
+                    }
+                }
+            }
+        };
+    }
+
+    createCtrlEvents('mouseDownAction', 'mouseDownShiftAction');
+    createCtrlEvents('mouseDragAction', 'mouseDragShiftAction');
+    createCtrlEvents('mouseMoveAction', 'mouseMoveShiftAction');
+    createCtrlEvents('mouseUpAction', 'mouseUpShiftAction');
+    createCtrlEvents('mouseOutAction', 'mouseOutShiftAction');
+    createCtrlEvents('mouseWheelAction', 'mouseWheelShiftAction');
+};
+
+/**
+ * create pixels object for canvas
+ */
 
 /**
  * set the line width in pixels, independent of scale
@@ -726,7 +799,7 @@ output.clearCanvas = function() {
 output.fillCanvas = function(color) {
     const transform = output.canvasContext.getTransform();
     output.canvasContext.setTransform(1, 0, 0, 1, 0, 0); // reset transform
-    output.canvasContext.fillStyle=color;
+    output.canvasContext.fillStyle = color;
     output.canvasContext.fillRect(0, 0, output.canvas.width, output.canvas.height);
     output.canvasContext.setTransform(transform);
 };

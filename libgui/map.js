@@ -21,6 +21,11 @@ import {
 
 export const map = {};
 
+// mouse wheel zooming factor
+map.zoomFactor = 1.04;
+// and rotating, angle step, in degrees
+map.angleStep = 1;
+
 // default input image for tests
 // set its absolute path for use in a internet site:
 // http://someSite.com/images/testimage.jpg or something similar
@@ -119,9 +124,6 @@ map.setOutputDraw = function() {
 map.startDrawing = function() {
     map.needsSizeArrayUpdate = true;
     map.rangeValid = false;
-    if (!guiUtils.isDefined(output.pixels)) {
-        output.pixels = new Pixels(output.canvas);
-    }
     output.pixels.update();
     const canvas = output.canvas;
     if ((map.width !== canvas.width) || (map.height !== canvas.height)) {
@@ -311,7 +313,7 @@ map.drawStructure = function() {
     }
     const length = map.width * map.height;
     for (var index = 0; index < length; index++) {
-        if (map.showRegion[map.regionArray[index]]) {
+        if (map.showRegion[map.regionArray[index]] && (map.sizeArray[index] >= 0)) {
             output.pixels.array[index] = map.colorTable[map.structureIndexArray[index]];
         } else {
             output.pixels.array[index] = 0; // transparent black
@@ -329,7 +331,7 @@ map.drawStructure = function() {
 // map.inputToControlScale is scale factor from input image to control canvas
 
 /**
- * get center and range of map values
+ * get center and range of map values (only valid points)
  * required for loading an input image and zooming/rotating image
  * @method map.determineRange
  */
@@ -343,12 +345,14 @@ map.determineRange = function() {
         let yMin = 1e10;
         let yMax = -1e10;
         for (i = 0; i < length; i++) {
-            const x = map.xArray[i];
-            xMax = Math.max(x, xMax);
-            xMin = Math.min(x, xMin);
-            const y = map.yArray[i];
-            yMax = Math.max(y, yMax);
-            yMin = Math.min(y, yMin);
+            if (map.sizeArray[i] >= 0) {
+                const x = map.xArray[i];
+                xMax = Math.max(x, xMax);
+                xMin = Math.min(x, xMin);
+                const y = map.yArray[i];
+                yMax = Math.max(y, yMax);
+                yMin = Math.min(y, yMin);
+            }
         }
         map.centerX = 0.5 * (xMax + xMin);
         map.centerY = 0.5 * (yMax + yMin);
@@ -556,6 +560,12 @@ map.drawImageVeryHighQuality = function() {
  * @param {ParamGui} gui
  */
 map.setupInputImage = function(gui) {
+    if (!(gui.isRoot()) && !(gui.parent && gui.parent.isRoot())) {
+        console.error('map.setupInputImage: Because the gui is in a higher level nested folder, the input image will not appear.');
+        console.log('Please use as gui the base gui or a first level folder.');
+        gui.addParagraph('map.setupInputImage: Use as gui the base gui or a first level folder!!!');
+        return;
+    }
     // a hidden canvas for the input image
     map.inputCanvas = document.createElement('canvas');
     map.inputCanvas.style.display = 'none';
@@ -607,7 +617,21 @@ map.setupInputImage = function(gui) {
     gui.bodyDiv.appendChild(controlDiv);
     // now the clientwidth accounts for the scroll bar
     // and we can get the effective width of the gui
+    // we can only determine the clientwidth if the folder (and parents) is open (displayed)
+    const parentGuiClosed = gui.parent && gui.parent.closed;
+    if (parentGuiClosed) {
+        gui.parent.bodyDiv.style.display = "block";
+    }
+    if (gui.closed) {
+        gui.bodyDiv.style.display = "block";
+    }
     map.guiWidth = gui.bodyDiv.clientWidth;
+    if (gui.closed) {
+        gui.bodyDiv.style.display = "none";
+    }
+    if (parentGuiClosed) {
+        gui.parent.bodyDiv.style.display = "none";
+    }
     controlDiv.style.width = map.guiWidth + 'px';
     controlDiv.style.height = map.guiWidth + 'px';
     controlDiv.style.backgroundColor = '#dddddd';
@@ -638,10 +662,6 @@ map.setupInputImage = function(gui) {
     // the mouse events on the control canvas
     map.mouseEvents = new MouseEvents(map.controlCanvas);
     const mouseEvents = map.mouseEvents;
-    // mouse wheel zooming factor
-    map.zoomFactor = 1.04;
-    // and rotating, angle step, in degrees
-    map.angleStep = 1;
     // vectors for intermediate results
     const u = {
         x: 0,
@@ -676,14 +696,6 @@ map.setupInputImage = function(gui) {
     // that means the inputTransformation does not change its image of the center of the map
     mouseEvents.wheelAction = function() {
         if (map.whatToShow !== 'structure') {
-            // the zoom center, map to input image
-            map.determineRange();
-            u.x = map.centerX;
-            u.y = map.centerY;
-            v.x = u.x;
-            v.y = u.y;
-            // transform center before zooming/rotating
-            inputTransform.transform(u);
             // position of mouse in input image plane
             u.x = mouseEvents.x / map.inputImageControlCanvasScale;
             u.y = mouseEvents.y / map.inputImageControlCanvasScale;
@@ -692,10 +704,10 @@ map.setupInputImage = function(gui) {
             // back to map plane
             inputTransform.inverseTransform(v);
             if (keyboard.shiftPressed) {
-                const step = (mouseEvents.wheelDelta > 0) ? output.angleStep : -output.angleStep;
+                const step = (mouseEvents.wheelDelta > 0) ? CoordinateTransform.angleStep : -CoordinateTransform.angleStep;
                 inputTransform.angle += step;
             } else {
-                const zoomFactor = (mouseEvents.wheelDelta > 0) ? output.zoomFactor : 1 / output.zoomFactor;
+                const zoomFactor = (mouseEvents.wheelDelta > 0) ? CoordinateTransform.zoomFactor : 1 / CoordinateTransform.zoomFactor;
                 inputTransform.scale *= zoomFactor;
             }
             inputTransform.updateTransform();

@@ -8,6 +8,7 @@
 import {
     guiUtils,
     CoordinateTransform,
+    Pixels,
     MouseEvents,
     ParamGui
 }
@@ -19,6 +20,7 @@ export const output = {};
 
 output.canvas = false;
 output.canvasContext = false; // 2d-context
+output.pixels = false;
 output.div = false;
 output.divHeight = 0;
 output.divWidth = 0;
@@ -37,7 +39,11 @@ output.drawCanvasChanged = function() {
 
 /**
  * draw output image when grid parameters change
- * kaleidoscopes: the map remains the same, do same as when image changes
+ * kaleidoscopes: the map remains the same, pixels remain the same
+ * output.drawGridChanged=function(){
+ *   output.pixels.show();
+ *   output.drawGrid();
+ * };
  * @method output.drawGridChanged()
  */
 output.drawGridChanged = function() {
@@ -139,7 +145,7 @@ function resizeOutputDiv() {
  */
 output.createDiv = function() {
     if (output.div) {
-        console.error("div exists already!");
+        console.error("output div exists already!");
     } else {
         output.div = document.createElement("div");
         output.div.style.position = "absolute";
@@ -417,6 +423,21 @@ output.setCanvasWidthToHeight = function(ratio = 1) {
 };
 
 /**
+ * set canvas dimensions
+ * disactivate the autoresizing
+ * @method output.setCanvasDimensions
+ * @param {integer} width
+ * @param {integer} height - optional, default width
+ */
+output.setCanvasDimensions = function(width, height = width) {
+    autoResizeController.setValueOnly(false);
+    autoResizeController.setActive(false);
+    widthController.setValueOnly(width);
+    heightController.setValueOnly(height);
+        autoResizeDraw();
+};
+
+/**
  * draw and enable drawing at resizing
  * call when drawing has been defined
  * @method output.resizeCanvasDraw
@@ -496,6 +517,7 @@ output.makeCanvasSizeButtons = function(gui, buttonDefinition) {
  * add a coordinate transform to the canvas
  * add mouse events to change the visible part (-> changes transform)
  * ctrl-key allows for other actions, Shift key changes wheel action to rotation
+ * change cursor, depending on ctrl-key
  * @method output.addCoordinateTransform
  * @param {ParamGui} gui - for the transform UI elements
  * @param {boolean} withRotation - optional, default is false
@@ -516,10 +538,6 @@ output.addCoordinateTransform = function(gui, withRotation = false) {
     output.canvas.style.cursor = "pointer";
     output.mouseEvents = new MouseEvents(output.canvas);
     const mouseEvents = output.mouseEvents;
-    // mouse wheel zooming factor
-    output.zoomFactor = 1.04;
-    // and rotating, angle step, in degrees
-    output.angleStep = 1;
     // vectors for intermediate results
     const u = {
         x: 0,
@@ -529,23 +547,63 @@ output.addCoordinateTransform = function(gui, withRotation = false) {
         x: 0,
         y: 0
     };
+
+    // switching with ctrl key from coordinate transformation to other actions
+    // changes cursor
+    // terminate events ?
+    // things can become confusing if ctrl&mousebutton pressed, ctrl released, mouse moves and image gets dragged
+    // thus ctrl key up or down event sets mouse pressed to false
+    // selected elements should stay selected even if ctrl-key goes up
+
+    document.addEventListener('keydown', function(event) {
+        if (event.key === 'Control') {
+            output.canvas.style.cursor = "default";
+            mouseEvents.setPressedFalse();
+        }
+    }, false);
+
+    document.addEventListener('keyup', function(event) {
+        if (event.key === 'Control') {
+            output.canvas.style.cursor = "pointer";
+            mouseEvents.setPressedFalse();
+            output.mouseCtrlUpAction();
+        }
+    }, false);
+
     // other actions (ctrl-key pressed) than changing the transform/view
-    output.mouseDownAction = function(mouseEvents) {}; // mouse down 
-    output.mouseDragAction = function(mouseEvents) {}; // mouse drag (move with button pressed)
-    output.mouseMoveAction = function(mouseEvents) {}; // mouse move (move with button released)
-    output.mouseUpAction = function(mouseEvents) {}; // mouse up
-    output.mouseOutAction = function(mouseEvents) {}; // mouse out (leave)
-    output.mouseWheelAction = function(mouseEvents) {}; // mouse wheel or keyboard keys
+    output.mouseCtrlInAction = function(mouseEvents) {}; // mouse up
+    output.mouseCtrlMoveAction = function(mouseEvents) {}; // mouse move (move with button released)
+    output.mouseCtrlDownAction = function(mouseEvents) {}; // mouse down 
+    output.mouseCtrlDragAction = function(mouseEvents) {}; // mouse drag (move with button pressed)
+    output.mouseCtrlUpAction = function(mouseEvents) {}; // mouse up
+    output.mouseCtrlOutAction = function(mouseEvents) {}; // mouse out (leave)
+    output.mouseCtrlWheelAction = function(mouseEvents) {}; // mouse wheel or keyboard keys
 
     // change the transform or do something else
+    mouseEvents.inAction = function() {
+        if (mouseEvents.ctrlPressed) {
+            transformMouseEvents(mouseEvents);
+            output.mouseCtrlInAction(mouseEvents);
+        }
+    };
+    mouseEvents.moveAction = function() {
+        if (mouseEvents.ctrlPressed) {
+            transformMouseEvents(mouseEvents);
+            output.mouseCtrlMoveAction(mouseEvents);
+        }
+    };
     mouseEvents.downAction = function() {
         if (mouseEvents.ctrlPressed) {
-            output.mouseDownAction(mouseEvents);
+            transformMouseEvents(mouseEvents);
+            output.mouseCtrlDownAction(mouseEvents);
+        } else {
+            output.canvas.style.cursor = "grabbing";
         }
     };
     mouseEvents.dragAction = function() {
         if (mouseEvents.ctrlPressed) {
-            output.mouseDragAction(mouseEvents);
+            transformMouseEvents(mouseEvents);
+            output.mouseCtrlDragAction(mouseEvents);
         } else {
             v.x = mouseEvents.dx;
             v.y = mouseEvents.dy;
@@ -557,24 +615,24 @@ output.addCoordinateTransform = function(gui, withRotation = false) {
             output.drawCanvasChanged();
         }
     };
-    mouseEvents.moveAction = function() {
-        if (mouseEvents.ctrlPressed) {
-            output.mouseMoveAction(mouseEvents);
-        }
-    };
     mouseEvents.upAction = function() {
         if (mouseEvents.ctrlPressed) {
-            output.mouseUpAction(mouseEvents);
+            transformMouseEvents(mouseEvents);
+            output.mouseCtrlUpAction(mouseEvents);
+        } else {
+            output.canvas.style.cursor = "pointer";
         }
     };
     mouseEvents.outAction = function() {
         if (mouseEvents.ctrlPressed) {
-            output.mouseOutAction(mouseEvents);
+            transformMouseEvents(mouseEvents);
+            output.mouseCtrlOutAction(mouseEvents);
         }
     };
     mouseEvents.wheelAction = function() {
         if (mouseEvents.ctrlPressed) {
-            output.mouseWheelAction(mouseEvents);
+            transformMouseEvents(mouseEvents);
+            output.mouseCtrlWheelAction(mouseEvents);
         } else {
             // the zoom center, prescaled
             u.x = mouseEvents.x;
@@ -583,10 +641,10 @@ output.addCoordinateTransform = function(gui, withRotation = false) {
             v.y = u.y;
             coordinateTransform.rotateScale(u);
             if (mouseEvents.shiftPressed && output.withRotation) {
-                const step = (mouseEvents.wheelDelta > 0) ? output.angleStep : -output.angleStep;
+                const step = (mouseEvents.wheelDelta > 0) ? CoordinateTransform.angleStep : -CoordinateTransform.angleStep;
                 coordinateTransform.angle += step;
             } else {
-                const zoomFactor = (mouseEvents.wheelDelta > 0) ? output.zoomFactor : 1 / output.zoomFactor;
+                const zoomFactor = (mouseEvents.wheelDelta > 0) ? CoordinateTransform.zoomFactor : 1 / CoordinateTransform.zoomFactor;
                 coordinateTransform.scale *= zoomFactor;
             }
             coordinateTransform.updateTransform();
@@ -634,54 +692,21 @@ function transformMouseEvents(mouseEvents) {
 }
 
 /**
- * alternative approach to ctrl-mouse actions with a list of objects
- * objects can have actions and shift-actions methods
- * doing objects with fitting method until method returns true
- * Methods: mouseDownAction, mouseDragAction, mouseMoveAction, mouseUpAction, mouseWheelAction, mouseOutAction
- * Methods: mouseDownShiftAction, mouseDragShiftAction, mouseMoveShiftAction, mouseUpShiftAction, mouseWheelShiftAction, mouseOutShiftAction
- * mouse event position data is transformed to computational space
- * @method output.useCtrlObjects
- * @param {Array of Objects} ctrlObjects
+ * create pixels object for canvas, call after creating the canvas
+ * show with: output.pixels.show();
+ * @method output.createPixels
  */
-output.useCtrlObjects = function(ctrlObjects) {
-
-    function createCtrlEvents(action, shiftAction) {
-        output[action] = function(mouseEvents) {
-            transformMouseEvents(mouseEvents);
-            const length = ctrlObjects.length;
-            for (var i = 0; i < length; i++) {
-                if (mouseEvents.shiftPressed) {
-                    if (guiUtils.isFunction(ctrlObjects[i][shiftAction])) {
-                        if (ctrlObjects[i][shiftAction](mouseEvents)) {
-                            return;
-                        }
-                    }
-                } else {
-                    if (guiUtils.isFunction(ctrlObjects[i][action])) {
-                        if (ctrlObjects[i][action](mouseEvents)) {
-                            return;
-                        }
-                    }
-                }
-            }
-        };
+output.createPixels = function() {
+    if (output.pixels) {
+        console.error("output.createPixels: pixels exists already!");
+        return;
     }
-
-    createCtrlEvents('mouseDownAction', 'mouseDownShiftAction');
-    createCtrlEvents('mouseDragAction', 'mouseDragShiftAction');
-    createCtrlEvents('mouseMoveAction', 'mouseMoveShiftAction');
-    createCtrlEvents('mouseUpAction', 'mouseUpShiftAction');
-    createCtrlEvents('mouseOutAction', 'mouseOutShiftAction');
-    createCtrlEvents('mouseWheelAction', 'mouseWheelShiftAction');
+    output.pixels = new Pixels(output.canvas);
 };
 
 /**
- * create pixels object for canvas
- */
-
-/**
  * set the line width in pixels, independent of scale
- * compensate for the scaling of the inverse transform: multiply with scale of forward transform
+ * COMPENSATE for the scaling of the inverse transform: multiply with scale of forward transform
  * @method output.setLineWidth
  * @param{number} width
  */

@@ -1,9 +1,14 @@
 /* jshint esversion: 6 */
 
 import {
+    guiUtils,
     output
 }
 from "../libgui/modules.js";
+
+import {
+    mirrors
+} from './modules.js';
 
 // directions
 const insideOut = 'inside-out';
@@ -28,35 +33,63 @@ Circle.selectWidth = Circle.highlightLineWidth;
  * a circle as a building block for kaleidoscopes
  * gets its own gui
  * @constructor Circle
- * @param{ParamGui} gui 
+ * @param{ParamGui} parentGui 
+ * @param{object} properties - optional, radius, centerX, centerY, isOutsideInMap, color (all optional),id
  */
-export function Circle(gui) {
+export function Circle(parentGui, properties) {
     this.radius = 1;
     this.centerX = 0;
     this.centerY = 0;
     this.isOutsideInMap = true;
     this.mapDirection = outsideIn;
-    this.color = '#00ff00';
+    this.intersections = [];
+    if (guiUtils.isObject(properties)) {
+        Object.assign(this, properties);
+    }
+    if (!guiUtils.isNumber(this.id)) {
+        this.id = mirrors.getId();
+    }
+    if (!guiUtils.isString(this.id)) {
+        this.color = mirrors.getColor();
+    }
     const circle = this;
     // controllers: do not do things with them from the outside
-    this.radiusController = gui.add({
+    this.gui = parentGui.addFolder('Circle ' + this.id);
+
+    this.radiusController = this.gui.add({
         type: 'number',
         params: this,
         property: 'radius',
         min: 0,
         onChange: function() {
-            circle.radius2 = circle.radius * circle.radius;
+            mirrors.setSelected(circle);
+            circle.setRadius(circle.radius);
             console.log('radius changed');
             Circle.draw();
         }
     });
-    this.centerXController = gui.add({
+    this.centerXController = this.gui.add({
         type: 'number',
         params: this,
         property: 'centerX',
         labelText: 'center: x',
-        onChange: function() {
-            console.log('centerX changed');
+        onChange: function(x) {
+            mirrors.setSelected(circle);
+            if (circle.intersections.length === 1) {
+                // only one intersection: adjust y-coordinate to get a rotation of center
+                // x- coordinate restricted to range of d around center of other circcle
+                const intersection = circle.intersections[0];
+                const d = intersection.distanceBetweenCenters();
+                const otherMirror = intersection.getOtherMirror(circle);
+                const otherCenterX = otherMirror.centerX;
+                const otherCenterY = otherMirror.centerY;
+                const dx = Math.min(d, Math.max(-d, x - otherCenterX));
+                if (circle.centerY < otherCenterY) {
+                    circle.setCenter(otherCenterX + dx, otherCenterY - Math.sqrt(d * d - dx * dx));
+                } else {
+                    circle.setCenter(otherCenterX + dx, otherCenterY + Math.sqrt(d * d - dx * dx));
+                }
+            }
             Circle.draw();
         }
     });
@@ -65,23 +98,39 @@ export function Circle(gui) {
         params: this,
         property: 'centerY',
         labelText: ' y',
-        onChange: function() {
-            console.log('centerY changed');
+        onChange: function(y) {
+            mirrors.setSelected(circle);
+            if (circle.intersections.length === 1) {
+                // only one intersection: adjust x-coordinate to get a rotation of center
+                // y- coordinate restricted to range of d around center of other circcle
+                const intersection = circle.intersections[0];
+                const d = intersection.distanceBetweenCenters();
+                const otherMirror = intersection.getOtherMirror(circle);
+                const otherCenterX = otherMirror.centerX;
+                const otherCenterY = otherMirror.centerY;
+                const dy = Math.min(d, Math.max(-d, y - otherCenterY));
+                if (circle.centerX < otherCenterX) {
+                    circle.setCenter(otherCenterX - Math.sqrt(d * d - dy * dy), otherCenterY + dy);
+                } else {
+                    circle.setCenter(otherCenterX + Math.sqrt(d * d - dy * dy), otherCenterY + dy);
+                }
+            }
             Circle.draw();
         }
     });
-    this.mapDirectionController = gui.add({
+    this.mapDirectionController = this.gui.add({
         type: 'selection',
         params: this,
         property: 'mapDirection',
         options: [outsideIn, insideOut],
         onChange: function() {
-            circle.isOutsideInMap = (circle.mapDirection === outsideIn);
+            mirrors.setSelected(circle);
+            circle.setIsOutsideInMap(circle.mapDirection === outsideIn);
             console.log('mapDirection changed', circle.isOutsideInMap);
             Circle.draw();
         }
     });
-    this.colorController = gui.add({
+    this.colorController = this.gui.add({
         type: 'color',
         params: this,
         property: 'color',
@@ -90,6 +139,8 @@ export function Circle(gui) {
             Circle.draw();
         }
     });
+    this.setRadius(this.radius);
+    this.setIsOutsideInMap(this.isOutsideInMap);
 }
 
 /**
@@ -106,6 +157,7 @@ Circle.prototype.updateUI = function() {
 /**
  * set the radius of the circle
  * NOTE: use this and do not set value of the controller directly
+ * may need to update the image
  * @method Circle#setRadius
  * @param {float} radius
  * @return this circle, for chaining
@@ -113,6 +165,7 @@ Circle.prototype.updateUI = function() {
 Circle.prototype.setRadius = function(radius) {
     this.radius2 = radius * radius;
     this.radius = radius;
+    this.adjustToIntersections();
     this.updateUI();
     return this;
 };
@@ -127,6 +180,7 @@ Circle.prototype.setRadius = function(radius) {
 Circle.prototype.setCenter = function(x, y) {
     this.centerX = x;
     this.centerY = y;
+    this.adjustToIntersections();
     this.updateUI();
     return this;
 };
@@ -140,7 +194,64 @@ Circle.prototype.setIsOutsideInMap = function(isOutsideIn) {
     this.isOutsideInMap = isOutsideIn;
     const direction = (isOutsideIn) ? outsideIn : insideOut;
     this.mapDirection = direction;
+    this.adjustToIntersections();
     this.updateUI();
+};
+
+/**
+ * get a parameter object that defines the circle
+ * with additional field type: 'circle'
+ * @method Circle#getProperties
+ * @return object with the properties
+ */
+Circle.prototype.getProperties = function() {
+    const properties = {
+        type: 'circle',
+        radius: this.radius,
+        centerX: this.centerX,
+        centerY: this.centerY,
+        isOutsideInMap: this.isOutsideInMap
+    };
+    return properties;
+};
+
+/**
+ * adjust the distance to another circle
+ * moves center of this circle to or away from center of other circle
+ * @method Circle#adjustDistanceToCircle
+ * @param {number} distance
+ * @param {Circle} circle
+ */
+Circle.prototype.adjustDistanceToCircle = function(distance, circle) {
+    const dx = this.centerX - circle.centerX;
+    const dy = this.centerY - circle.centerY;
+    const d = Math.hypot(dx, dy);
+    const factor = distance / d;
+    this.centerX = circle.centerX + factor * dx;
+    this.centerY = circle.centerY + factor * dy;
+};
+
+/**
+ * adjust circle to intersections
+ * nothing to do if there is no intersection
+ * update the UI after calling this!!
+ * adjust distance to other circcle if there is only one interssection
+ *....
+ * @method Circlee#adjustToIntersections
+ */
+Circle.prototype.adjustToIntersections = function() {
+    switch (this.intersections.length) {
+        case 0:
+            return;
+        case 1:
+            const d = this.intersections[0].distanceBetweenCenters();
+            const otherMirror = this.intersections[0].getOtherMirror(this);
+            this.adjustDistanceToCircle(d, otherMirror);
+            return;
+            case 2:
+            console.log('2 intersections');
+            return;
+    }
 };
 
 /**
@@ -254,4 +365,13 @@ Circle.prototype.dragAction = function(event) {
 Circle.prototype.wheelAction = function(event) {
     const zoomFactor = (event.wheelDelta > 0) ? Circle.zoomFactor : 1 / Circle.zoomFactor;
     this.setRadius(this.radius * zoomFactor);
+};
+
+/**
+ * destroy the circle and all that depends on it
+ * make that there are no more references to this circle hanging around
+ * @method Circle#destroy
+ */
+Circle.prototype.destroy = function() {
+    this.gui.destroy();
 };

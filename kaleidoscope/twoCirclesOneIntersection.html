@@ -24,7 +24,8 @@ import {
 
 import {
     Circle,
-    mirrors
+    mirrors,
+    Intersection
 } from './modules.js';
 
 // basic setup
@@ -58,38 +59,31 @@ map.mapping = function(point) {
 };
 
 
-gui.addParagraph('circle 1')
 
-const circle=new Circle(gui);
 const d=Math.sqrt(3)/2;
 
-circle.setRadius(1);
-circle.setCenter(d,0);
-mirrors.add(circle)
 
-gui.addParagraph('circle 2')
-
-const circle2=new Circle(gui);
+mirrors.makeGui(gui);
 
 
-circle2.setRadius(1);
-circle2.setCenter(-d,0);
 
-mirrors.add(circle2)
+mirrors.addCircle({radius:1,centerX:-d})
+mirrors.addCircle({radius:1,centerX:d})
+
+const is=new Intersection(mirrors.collection[0],mirrors.collection[1],5)
 
 
 map.drawImageChanged = function() {
 map.draw();
     mirrors.draw()
 }
+Circle.draw = map.drawMapChanged;
 
-Circle.draw=map.drawMapChanged;
-
-output.mouseCtrlMoveAction=function(event){
-    if (mirrors.isSelected(event)){
-            output.canvas.style.cursor = "pointer";
+output.mouseCtrlMoveAction = function(event) {
+    if (mirrors.isSelected(event)) {
+        output.canvas.style.cursor = "pointer";
     } else {
-                    output.canvas.style.cursor = "default";
+        output.canvas.style.cursor = "default";
     }
     output.pixels.show();
     mirrors.draw(false);
@@ -101,10 +95,16 @@ output.mouseCtrlDownAction=function(event){
     mirrors.draw(false);
 };
 
+output.mouseCtrlWheelAction = function(event) {
+    if (event.shiftPressed) {
+        console.log('wheel')
+        is.incDecN(event.wheelDelta);
+        map.drawMapChanged();
 
-output.mouseCtrlWheelAction=function(event){
-    mirrors.wheelAction(event);
-    map.drawMapChanged();
+    } else {
+        mirrors.wheelAction(event);
+        map.drawMapChanged();
+    }
 };
 
 output.mouseCtrlDragAction=function(event){

@@ -6,7 +6,7 @@
 <link rel="icon" href="data:,">
 
 <head>
-    <title> three circles line</title>
+    <title> three circles triangle</title>
 </head>
 
 <body>
@@ -56,12 +56,14 @@ map.mapping = function(point) {
 circles.makeGui(gui);
 
 const d=Math.sqrt(3);
-circles.add({radius:1,centerX:-d})
-circles.add({radius:1,centerX:d})
-circles.add({radius:1,centerX:0})
+const rt32=Math.sqrt(3)/2;
+circles.add({radius:1,centerX:0,centerY:1})
+circles.add({radius:1,centerX:rt32,centerY:-0.5})
+circles.add({radius:1,centerX:-rt32,centerY:-0.5})
 
-const is=new Intersection(circles.collection[0],circles.collection[2],3)
-const is2=new Intersection(circles.collection[1],circles.collection[2],3)
+const is=new Intersection(circles.collection[0],circles.collection[1],3)
+const is2=new Intersection(circles.collection[0],circles.collection[2],3)
+const is3=new Intersection(circles.collection[1],circles.collection[2],3)
 
 circles.collection[0].adjustToIntersections();
 circles.collection[1].adjustToIntersections();

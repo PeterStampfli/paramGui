@@ -33,7 +33,7 @@ The increment of value for each scroll changes the digit where the caret is.
  * autoPlace - boolean - placing the gui automatically?? - default: true
  * hideable - boolean - hide/show with keyboard ParamGui.hideCharacter press ("Tab") - default: true
  *                                              (should not be a printable character)
- * closed - boolean - start gui in closed state - default: false
+ * closed - boolean - start gui in closed state - default: true
  * closeOnTop - boolean - make a titlebar with show/close button - default: false
  */
 
@@ -1119,6 +1119,9 @@ ParamGui.prototype.addVerticalSpace = function(height, backgroundColor) {
 /**
  * add a "paragraph" (its actually a div with optional inner html)
  * text wraps automatically (rewraps if scroll bar appears)
+ * you can change its text with para.innerHTML = innerHTML;
+ * you can delete it with para.remove();
+ * you can style it
  * @method ParamGui#addParagraph
  * @param {String} text - with HTML markup (=>innerHTML)
  * @return the html <p> element, for futher formatting, in case

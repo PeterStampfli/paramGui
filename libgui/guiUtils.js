@@ -552,6 +552,7 @@ guiUtils.regulaFalsi = function(fun, x1, x2, acc) {
  * @return {boolean} true if there are real solutions
  */
 guiUtils.quadraticEquation = function(a, b, c, data) {
+    var s1,s2;
     const rootArg = b * b - 4 * a * c;
     if (rootArg < 0) {
         data.x = 0;
@@ -559,11 +560,17 @@ guiUtils.quadraticEquation = function(a, b, c, data) {
         return false;
     }
     if (b > 0) {
-        data.x = 0.5 * (-b - Math.sqrt(rootArg)) / a;
-        data.y = c / a / data.x;
+        s1 = 0.5 * (-b - Math.sqrt(rootArg)) / a;
     } else {
-        data.y = 0.5 * (-b + Math.sqrt(rootArg)) / a;
-        data.x = c / a / data.y;
+        s1 = 0.5 * (-b + Math.sqrt(rootArg)) / a;
+    }
+    s2 = c / a / s1;
+    if (s1<s2){
+        data.x=s1;
+        data.y=s2;
+    } else {
+        data.x=s2;
+        data.y=s1;
     }
     return true;
 };

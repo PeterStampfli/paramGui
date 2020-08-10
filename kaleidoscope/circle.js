@@ -160,10 +160,77 @@ Circle.prototype.activateUI = function() {
 };
 
 /**
+ * adjust the radius of a circle with only one intersection
+ * use this for a given position of the center
+ * return if successful
+ * @method Circle#adjustRadiusOneIntersection
+ * @param {number} centerX
+ * @param {number} centerY
+ * @return boolean, success
+ */
+Circle.prototype.adjustRadiusOneIntersection = function(centerX, centerY) {
+    // basic data
+    const intersection = this.intersections[0];
+    const otherCircle = intersection.getOtherCircle(this);
+    const coeff = 2 * otherCircle.radius * intersection.signCosAngle();
+    if (coeff < 0) {
+        return false; // unstable because of two possible solutions radius(distance)
+    }
+    const dx = centerX - otherCircle.centerX;
+    const dy = centerY - otherCircle.centerY;
+    const distance2 = dx * dx + dy * dy;
+    if ((coeff > 0) && (distance2 < otherCircle.radius2)) {
+        // both circles map in the same direction:
+        // center of this circle cannot lie inside other circle, (would result in negative radius)
+        // Correction: center lies on the circle and its radius vanishes
+        const factor = Math.sqrt(otherCircle.radius2 / distance2);
+        this.centerX = otherCircle.centerX + factor * dx;
+        this.centerY = otherCircle.centerY + factor * dy;
+        this.radius = 0;
+        this.radius2 = 0;
+        return true;
+    }
+    // setting up the quadratic equation
+    const a = 1;
+    const b = coeff;
+    const c = otherCircle.radius2 - distance2;
+    // solve, catch fails (no real solution, no positve solution)
+    let success = true;
+    const data = {};
+    if (guiUtils.quadraticEquation(a, b, c, data)) {
+        if ((data.x > 0) && (Math.abs(this.radius - data.x) < Math.abs(this.radius - data.y))) {
+            // data.x is the smaller solution than data.y
+            // if it is positive, then we have two valid solutions, take the one that is closer to current radius
+            this.radius = data.x;
+        } else if (data.y > 0) {
+            // we have only one positive solution for the radius
+            this.radius = data.y;
+        } else {
+            // no positive solution, fail
+            // console.error('Circle#adjustRadiusOneIntersection: Quadratic equation for minimum radius has no positve solution! Intersection:');
+            // console.log(this);
+            success = false;
+        }
+    } else {
+        // no real solution, fail
+        // console.error('Circle#adjustRadiusOneIntersection: Quadratic equation for minimum radius has no real solution! Intersection:');
+        // console.log(this);
+        success = false;
+    }
+    if (success) {
+        this.radius2 = this.radius * this.radius;
+        this.centerX = centerX;
+        this.centerY = centerY;
+    }
+    return success;
+};
+
+/**
  * adjust the distance to another circle for a single intersection
- * use this for all cases
+ * use this for the current radius and position
  * moves center of this circle to or away from center of the other circle of the intersection
  * @method Circle#adjustPositionOneIntersection
+ * @return true, always successful
  */
 Circle.prototype.adjustPositionOneIntersection = function() {
     const distance = this.intersections[0].distanceBetweenCenters();
@@ -174,6 +241,7 @@ Circle.prototype.adjustPositionOneIntersection = function() {
     const factor = distance / d;
     this.centerX = otherCircle.centerX + factor * dx;
     this.centerY = otherCircle.centerY + factor * dy;
+    return true;
 };
 
 /**
@@ -234,8 +302,8 @@ Circle.prototype.adjustPositionTwoIntersections = function(radius) {
             } else if (data.y > 0) {
                 radius = data.y;
             } else {
-                console.error('Circle#centerPositionsTwoIntersections: Quadratic equation for minimum radius has no positve solution! Intersection:');
-                console.log(this);
+                //  console.error('Circle#centerPositionsTwoIntersections: Quadratic equation for minimum radius has no positve solution! Intersection:');
+                //  console.log(this);
                 // fail, restore radius, do not change position
                 this.radius = currentRadius;
                 this.radius2 = currentRadius * currentRadius;
@@ -247,15 +315,14 @@ Circle.prototype.adjustPositionTwoIntersections = function(radius) {
             distanceToCenter1 = intersection1.distanceBetweenCenters();
             distanceToCenter2 = intersection2.distanceBetweenCenters();
         } else {
-            console.error('Circle#centerPositionsTwoIntersections: Quadratic equation for minimum radius has no real solution! Intersection:');
-            console.log(this);
+            //  console.error('Circle#centerPositionsTwoIntersections: Quadratic equation for minimum radius has no real solution! Intersection:');
+            //  console.log(this);
             // fail, restore radius, do not change position
             this.radius = currentRadius;
             this.radius2 = currentRadius * currentRadius;
             return false;
         }
     }
-
     // midpoint of the two solutions on the line between the two other centers
     const parallelPosition = 0.5 * (distanceCenter1To2 + (distanceToCenter1 * distanceToCenter1 - distanceToCenter2 * distanceToCenter2) / distanceCenter1To2);
     let xi = parallelPosition / distanceCenter1To2;
@@ -327,6 +394,7 @@ Circle.prototype.adjustRadiusTwoIntersections = function(centerX, centerY) {
     const data = {};
     if (guiUtils.quadraticEquation(a, b, c, data)) {
         // data.x is the smaller solution than data.y
+        // if data.x is positive and closer to the current radius take it as solution
         if ((data.x > 0) && (Math.abs(this.radius - data.x) < Math.abs(this.radius - data.y))) {
             this.radius = data.x;
         } else if (data.y > 0) {
@@ -371,15 +439,12 @@ Circle.prototype.adjustThreeIntersections = function(pos1, pos2) {
     const center1X = otherCircle1.centerX;
     const center1Y = otherCircle1.centerY;
     const center1Square = center1X * center1X + center1Y * center1Y;
-    console.log('center1', center1X, center1Y, center1Square);
     const center2X = otherCircle2.centerX;
     const center2Y = otherCircle2.centerY;
     const center2Square = center2X * center2X + center2Y * center2Y;
-    console.log('center2', center2X, center2Y, center2Square);
     const center3X = otherCircle3.centerX;
     const center3Y = otherCircle3.centerY;
     const center3Square = center3X * center3X + center3Y * center3Y;
-    console.log('center3', center3X, center3Y, center3Square);
     const center1To2X = center2X - center1X;
     const center1To2Y = center2Y - center1Y;
     const center1To3X = center3X - center1X;
@@ -387,60 +452,52 @@ Circle.prototype.adjustThreeIntersections = function(pos1, pos2) {
     const coeff1 = 2 * otherCircle1.radius * intersection1.signCosAngle();
     const coeff2 = 2 * otherCircle2.radius * intersection2.signCosAngle();
     const coeff3 = 2 * otherCircle3.radius * intersection3.signCosAngle();
-    console.log('coeffs', coeff1, coeff2, coeff3);
     const radius1Square = otherCircle1.radius2;
     const radius2Square = otherCircle2.radius2;
     const radius3Square = otherCircle3.radius2;
     // the system of linear equations for the center of this circle
     const denom = center1To2X * center1To3Y - center1To3X * center1To2Y;
-    console.log(center1To2X, center1To3Y, center1To3X, center1To2Y);
-    console.log('denom', denom);
+    if (denom < 0.001 * (Math.abs(center1To2X * center1To3Y) + Math.abs(center1To3X * center1To2Y))) {
+        // nearly colinear, fail
+        return false;
+    }
     const g13 = 0.5 * (coeff3 - coeff1);
     const g21 = 0.5 * (coeff1 - coeff2);
     const g32 = 0.5 * (coeff2 - coeff3);
-    console.log('gij', g13, g21, g32);
     // fij=0.5*(p_i^2-r_i^2-p_j^2+r_j^2)
     const f13 = 0.5 * (center1Square - otherCircle1.radius2 - center3Square + otherCircle3.radius2);
     const f21 = 0.5 * (center2Square - otherCircle2.radius2 - center1Square + otherCircle1.radius2);
     const f32 = 0.5 * (center3Square - otherCircle3.radius2 - center2Square + otherCircle2.radius2);
-    console.log('fij', f13, f21, f32);
     // coefficients of the linear equation for this circle center as a function of r
     const a0 = (f32 * center1Y + f21 * center3Y + f13 * center2Y) / denom;
     const a1 = (g32 * center1Y + g21 * center3Y + g13 * center2Y) / denom;
     const b0 = -(f32 * center1X + f21 * center3X + f13 * center2X) / denom;
     const b1 = -(g32 * center1X + g21 * center3X + g13 * center2X) / denom;
-    console.log('a0,a1', a0, a1);
-    console.log('b0,b1', b0, b1);
     // checking the linear equation
-    console.log('lineq for x', this.centerX, this.radius * a1 + a0);
-    console.log('lineq for y', this.centerY, this.radius * b1 + b0);
     // setting up the quadratic equation for r
     const a = 1 - a1 * a1 - b1 * b1;
     const b = coeff1 - 2 * a1 * (a0 - center1X) - 2 * b1 * (b0 - center1Y);
     const c = otherCircle1.radius2 - (a0 - center1X) * (a0 - center1X) - (b0 - center1Y) * (b0 - center1Y);
     const data = {};
-    console.log(a, b, c);
-    if (!guiUtils.quadraticEquation(a, b, c, data)) {
-        console.error('Circle#centerPositionsThreeIntersections: Quadratic equation for radius has no real solution! Intersection:');
-        console.log(this);
-        return false;
-    } else if (data.y < 0) {
-        console.error('Circle#centerPositionsThreeIntersections: Quadratic equation for radius has only negative solutions! Intersection:');
-        console.log(this);
-        return false;
-    } else if (data.x < 0) {
-        // only one positive solution
-        this.radius = data.y;
-    } else {
-        // choose solution closer to this.radius
-        if (Math.abs(data.x - this.radius) < Math.abs(data.y - this.radius)) {
+    if (guiUtils.quadraticEquation(a, b, c, data)) {
+        // data.x is the smaller solution than data.y
+        // if data.x is positive and closer to the current radius take it as solution
+        if ((data.x > 0) && (Math.abs(this.radius - data.x) < Math.abs(this.radius - data.y))) {
             this.radius = data.x;
-        } else {
+        } else if (data.y > 0) {
             this.radius = data.y;
+        } else {
+            //  console.error('Circle#adjustThreeIntersections: Quadratic equation for radius has only negative solutions! Intersection:');
+            //      console.log(this);
+            // fail, do not change anything
+            return false;
         }
+    } else {
+        //  console.error('Circle#adjustThreeIntersections: Quadratic equation for radius has no real solution! Intersection:');
+        //console.log(this);
+        // fail, do not change anything
+        return false;
     }
-    console.log('solution for r', data);
-    console.log(this);
     this.radius2 = this.radius * this.radius;
     // now determine the position of the center from the linear equation
     this.centerX = a1 * this.radius + a0;
@@ -463,7 +520,7 @@ Circle.prototype.tryRadius = function(radius) {
             this.radius2 = radius * radius;
             break;
         case 1:
-            // keep the radius, change distance to other circle
+            // keep the radius, change distance to other circle, always possible
             this.radius = radius;
             this.radius2 = radius * radius;
             this.adjustPositionOneIntersection();
@@ -498,10 +555,13 @@ Circle.prototype.tryPosition = function(centerX, centerY) {
             this.centerY = centerY;
             break;
         case 1:
-            // keep the radius, change distance to other circle
-            this.centerX = centerX;
-            this.centerY = centerY;
-            this.adjustPositionOneIntersection();
+            // first try to adjust the radius for the new position
+            if (!this.adjustRadiusOneIntersection(centerX, centerY)) {
+                // if it failed, keep radius and adjust distance between the circles
+                this.centerX = centerX;
+                this.centerY = centerY;
+                this.adjustPositionOneIntersection();
+            }
             break;
         case 2:
             success = this.adjustRadiusTwoIntersections(centerX, centerY);
@@ -552,6 +612,40 @@ Circle.prototype.adjustToIntersections = function() {
 };
 
 /**
+ * adjust circle to intersections when adding intersection or changing order
+ * nothing to do if there is no intersection
+ * adjust radius if there is only one intersection (increase radius if too small)
+ * adjust radius of circle if there are two intersections
+ * adjust radius and position of circle for three intersections
+ * update UI if successful
+ * update output image elsewhere
+ * return if successful
+ * @method Circle#adjustToIntersections
+ * @return boolean, true if success, false if something failed
+ */
+Circle.prototype.adjustRadiusToIntersections = function() {
+    let success = true;
+    switch (this.intersections.length) {
+        case 0:
+            break;
+        case 1:
+            // one intersection is 'trivial', we can keep the radius and change the distance to the other circle
+            this.adjustRadiusOneIntersection(this.centerX, this.centerY);
+            break;
+        case 2:
+            success = this.adjustRadiusTwoIntersections(this.centerX, this.centerY);
+            break;
+        case 3:
+            success = this.adjustThreeIntersections();
+            break;
+    }
+    if (success) {
+        this.updateUI();
+    }
+    return success;
+};
+
+/**
  * try a given map direction, adjust circle radius and position to intersections
  * if fails do not change current position
  * if success update UI to new values and draw image
@@ -568,6 +662,7 @@ Circle.prototype.tryMapDirection = function(isInsideOutMap) {
         Circle.draw();
     } else {
         this.isInsideOutMap = currentIsInsideOutMap; // fail: restore value
+        this.updateUI();
     }
 };
 

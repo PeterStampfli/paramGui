@@ -36,30 +36,46 @@ Intersection.prototype.distanceBetweenCenters = function() {
 };
 
 /**
-* calculate sign times cos(angle)
-* @method Intersection#signCosAngle
-* @return number
-*/
+ * calculate sign times cos(angle)
+ * @method Intersection#signCosAngle
+ * @return number
+ */
 Intersection.prototype.signCosAngle = function() {
     const sign = (this.circle1.isInsideOutMap === this.circle2.isInsideOutMap) ? 1 : -1;
     const cosAlpha = Math.cos(Math.PI / this.n);
-    return sign*cosAlpha;
+    return sign * cosAlpha;
 };
 
 /**
- * change the order n of the intersection
+ * try to change the order n of the intersection
  * see if one of the circles is selected, then adjust it
- * if none is selected, make that second circle is selected and adjust
- * @method Intersection#setN
+ * if fail try to adjust the other circle
+ * if none is selected try both
+ * if all fails restore order n
+ * return if successful
+ * makes that both circles will be selected
+ * @method Intersection#tryN
  * @param {integer} n
+ * @return boolean, true if success
  */
-Intersection.prototype.setN = function(n) {
+Intersection.prototype.tryN = function(n) {
+    const currentN = this.n;
     this.n = Math.max(2, Math.round(n));
-    if ((circles.selected !== this.circle1) && (circles.selected !== this.circcle2)) {
+    if (circles.selected === this.circle1) {
+        circles.setSelected(this.circle2);
+        circles.setSelected(this.circle1);
+    } else {
+        circles.setSelected(this.circle1);
         circles.setSelected(this.circle2);
     }
-    circles.selected.adjustToIntersections();
-    circles.selected.updateUI();
+    let success = circles.selected.adjustToIntersections();
+    if (!success) {
+        success = circles.otherSelected.adjustToIntersections();
+    }
+    if (!success) {
+        this.n = currentN;
+    }
+    return success;
 };
 
 /**
@@ -69,9 +85,9 @@ Intersection.prototype.setN = function(n) {
  */
 Intersection.prototype.incDecN = function(direction) {
     if (direction > 0) {
-        this.setN(this.n + 1);
+        this.tryN(this.n + 1);
     } else {
-        this.setN(this.n - 1);
+        this.tryN(this.n - 1);
     }
 };
 
@@ -95,8 +111,8 @@ Intersection.prototype.getOtherCircle = function(circle) {
  * @method Intersection#destroy
  */
 Intersection.prototype.destroy = function() {
- this.circle1.removeIntersection(this);
- this.circle2.removeIntersection(this);
+    this.circle1.removeIntersection(this);
+    this.circle2.removeIntersection(this);
 
-// remove from list, delete UI
+    // remove from list, delete UI
 };

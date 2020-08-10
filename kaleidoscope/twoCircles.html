@@ -55,8 +55,8 @@ map.mapping = function(point) {
 circles.makeGui(gui);
 
 const d=Math.sqrt(3)/2;
-circles.add({radius:1,centerX:-d})
-circles.add({radius:1,centerX:d})
+circles.add({radius:1,centerX:-d, isInsideOutMap:false})
+circles.add({radius:1,centerX:d, isInsideOutMap:false})
 
 const is=new Intersection(circles.collection[0],circles.collection[1],5)
 circles.collection[0].adjustToIntersections();
@@ -85,10 +85,8 @@ output.mouseCtrlDownAction=function(event){
 
 output.mouseCtrlWheelAction = function(event) {
     if (event.shiftPressed) {
-        console.log('wheel')
         is.incDecN(event.wheelDelta);
         map.drawMapChanged();
-
     } else {
         circles.wheelAction(event);
         map.drawMapChanged();

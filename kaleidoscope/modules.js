@@ -34,3 +34,17 @@ export {
 }
 from "./intersection.js";
 
+export {
+    intersections
+}
+from "./intersections.js";
+
+export {
+    basic
+}
+from "./basic.js";
+
+export {
+    presets
+}
+from "./presets.js";

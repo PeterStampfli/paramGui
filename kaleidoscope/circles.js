@@ -2,11 +2,15 @@
 
 import {
     map,
+    BooleanButton,
+    output,
     guiUtils
 } from "../libgui/modules.js";
 
 import {
-    Circle
+    Circle,
+    intersections,
+    basic
 } from './modules.js';
 
 /**
@@ -22,7 +26,11 @@ circles.collection = [];
 circles.selected = false;
 // the other selected circle (making intersections)
 circles.otherSelected = false;
+
 // ids and colors for circles
+// we have to use id numbers, not indices for the array
+// because we may delete elements of the collection array
+// we need id numbers to reconstruct intersections between circles (presets, saving the structure)
 
 let id = -1;
 
@@ -61,23 +69,21 @@ circles.getColor = function() {
  * @return the circle
  */
 circles.add = function(properties = {}) {
-    properties.id = circles.getId();
-    properties.color = circles.getColor();
-    const circle = new Circle(circles.gui, properties);
-    const index = circles.collection.indexOf(circle);
-    if (index >= 0) {
-        console.error('circles.add: circle already there. It is:');
-        console.log(circle);
-        circles.selected = circles.collection[index];
-    } else {
-        circles.collection.push(circle);
-        circles.setSelected(circle);
+    if (!guiUtils.isNumber(properties.id)) {
+        properties.id = circles.getId();
     }
+    if (!guiUtils.isString(properties.color)) {
+        properties.color = circles.getColor();
+    }
+    const circle = new Circle(circles.gui, properties); // this creates a unique new circle, which is not in the collection
+    circles.collection.push(circle);
+    circles.setSelected(circle);
     return circle;
 };
 
 /**
  * remove a circle from the collection
+ * beware if selected
  * @method circles.remove
  * @param {Circle} circle
  */
@@ -89,35 +95,69 @@ circles.remove = function(circle) {
         console.error('circles.remove: circle not found. It is:');
         console.log(circle);
     }
+    if (circles.selected === circle) {
+        circles.selected = circles.otherSelected;
+        circles.otherSelected = false;
+    }
+    if (circles.otherSelected === circle) {
+        circles.otherSelected = false;
+    }
+    circles.activateUI();
+    intersections.activateUI();
 };
+
+/**
+ * get a circle with a given id number
+ * returns false if not found
+ * @method circles.findId
+ * @param {Integer} id
+ * @return Circle, with given id, or false if not found
+ */
+circles.findId = function(id) {
+    const length = circles.collection.length;
+    for (var i = 0; i < length; i++) {
+        if (id === circles.collection[i].id) {
+            return circles.collection[i];
+        }
+    }
+    console.error('circles.findId: id not found. Is ' + id + '. The collection of circles:');
+    console.log(circles.collection);
+    return false;
+};
+
 
 /**
  * destroy all circles
  * @method circles.clear
  */
 circles.clear = function() {
-    circles.collection.forEach(circle => circle.destroy());
-    circles.collection.length = 0;
+    while (circles.collection.length > 0) {
+        circles.collection[circles.collection.length - 1].destroy();
+    }
 };
 
 /**
- * make an array of properties for the circles, stringify it in JSON
- * @method circles.getJSON
- * @return JSON string
+ * make an array of properties for the circles
+ * take only circles that are mapping
+ * @method circles.get
+ * @return array of circle property objects
  */
-circles.getJSON = function() {
+circles.get = function() {
     const result = [];
-    circles.collection.forEach(circle => result.push(circle.getProperties()));
-    return JSON.stringify(result);
+    const length = circles.collection.length;
+    for (var i = 0; i < length; i++) {
+        const circle = circles.collection[i];
+        result.push(circle.getProperties());
+    }
+    return result;
 };
 
 /**
- * set the array of circles from a JSON string
- * @method circles.setJSON
- * @param {string} json
+ * set the array of circles from an array of properties
+ * @method circles.set
+ * @param {array of circle property objects} input
  */
-circles.setJSON = function(json) {
-    const input = JSON.parse(json);
+circles.set = function(input) {
     circles.clear();
     input.forEach(properties => circles.add(properties));
 };
@@ -128,13 +168,15 @@ circles.setJSON = function(json) {
  * @method circles.draw
  */
 circles.draw = function() {
-    if (circles.otherSelected) {
-        circles.otherSelected.draw(2);
+    if (circles.visible) {
+        if (circles.otherSelected) {
+            circles.otherSelected.draw(2);
+        }
+        if (circles.selected) {
+            circles.selected.draw(1);
+        }
+        circles.collection.forEach(circle => circle.draw(0));
     }
-    if (circles.selected) {
-        circles.selected.draw(1);
-    }
-    circles.collection.forEach(circle => circle.draw(0));
 };
 
 // interaction with the mouse
@@ -148,12 +190,27 @@ circles.draw = function() {
  */
 circles.makeGui = function(parentGui, args = {}) {
     circles.gui = parentGui.addFolder('circles', args);
+    circles.visible = true;
+    circles.selectedMessage = circles.gui.addParagraph('Selected: none');
+    BooleanButton.greenRedBackground();
+    circles.visibleButton = circles.gui.add({
+        type: 'boolean',
+        params: circles,
+        property: 'visible',
+        labelText: '',
+        buttonText: ['visible', 'hidden'],
+        onChange: function() {
+            output.pixels.show(); // no new map
+            circles.draw();
+            intersections.draw();
+        }
+    });
     circles.gui.add({
         type: 'button',
         buttonText: 'add circle',
         onClick: function() {
             circles.add();
-            map.drawMapChanged();
+            basic.drawMapChanged();
         }
     });
     circles.deleteButton = circles.gui.add({
@@ -162,14 +219,30 @@ circles.makeGui = function(parentGui, args = {}) {
         onClick: function() {
             if (guiUtils.isObject(circles.selected)) {
                 circles.selected.destroy();
-                circles.selected = circles.otherSelected;
-                circles.otherSelected = false;
-                map.drawMapChanged();
+                basic.drawMapChanged();
             }
-            circles.deleteButton.setActive(guiUtils.isObject(circles.selected));
         }
     });
-    circles.deleteButton.setActive(false);
+    circles.activateUI();
+};
+
+/**
+ * activate the UI (the dlete button depending whether there is a circle left over)
+ * and update message for selected circles
+ * @method circles.activateUI
+ */
+circles.activateUI = function() {
+    circles.deleteButton.setActive(guiUtils.isObject(circles.selected));
+    let message = 'Selected: ';
+    if (guiUtils.isObject(circles.selected)) {
+        message += '<strong>' + circles.selected.id + '</strong>';
+        if (guiUtils.isObject(circles.otherSelected)) {
+            message += ' and ' + circles.otherSelected.id;
+        }
+    } else {
+        message += 'none';
+    }
+    circles.selectedMessage.innerHTML = message;
 };
 
 /**
@@ -191,7 +264,8 @@ circles.isSelected = function(position) {
 
 /**
  * set a circle as selected, and set that it can be deleted
- * note already seleccted circcle as other selected circle (for making intersections)
+ * note already selected circle as other selected circle (for making intersections)
+ * select the corresponding intersection, if there is one
  * @method circles.setSelected
  * @param {Circle} circle
  */
@@ -200,26 +274,36 @@ circles.setSelected = function(circle) {
     if (circle !== circles.selected) {
         circles.otherSelected = circles.selected;
         circles.selected = circle;
-        circles.deleteButton.setActive(true);
+        const index = intersections.indexOf(circles.selected, circles.otherSelected);
+        if (index >= 0) {
+            intersections.selected = intersections.collection[index];
+        } else {
+            intersections.selected = false;
+        }
+        circles.activateUI();
+        intersections.activateUI();
     }
 };
 
 /**
- * select a circle depending on (mouse) position
- * for a mouse ctrl down event
+ * select circles depending on (mouse) position
+ * sets selected (and otherSelected) circle
+ * reurns true if something has been selected (for preventing other events)
  * @method circles.select
  * @param {object} position - with (x,y) fields
+ * @return boolean, true if a circle has been selected
  */
 circles.select = function(position) {
     const length = circles.collection.length;
+    let selected = false;
     for (var i = 0; i < length; i++) {
         if (circles.collection[i].isSelected(position)) {
             circles.setSelected(circles.collection[i]);
-            return;
+            selected = true;
         }
     }
+    return selected;
 };
-
 
 /**
  * wheel action on the selected circle
@@ -248,13 +332,32 @@ circles.dragAction = function(event) {
 // mapping
 //==================================
 
-// basic, rudimentary
-
 // max number of iterations
 const maxIterations = 20;
 
 /**
+ * check if all mapping circles are mapping inside out
+ * @circles.allInsideOut
+ * @return boolean, true if all circles are mapping inside out, false if there is no mapping circle
+ */
+circles.allInsideOut = function() {
+    let mappingCircle = false;
+    const length = circles.collection.length;
+    for (var i = 0; i < length; i++) {
+        const circle = circles.collection[i];
+        if (circle.isMapping) {
+            if (!circle.isInsideOutMap) {
+                return false;
+            }
+            mappingCircle = true;
+        }
+    }
+    return mappingCircle;
+};
+
+/**
  * mapping, using the circles, repeat until no more mapping
+ * make an inversion at first circle, if all circles are inside->out mapping
  * or maximum number of iterations
  * @method circles.map
  * @param {object} point - with x,y,structureIndex and valid fields
@@ -270,6 +373,10 @@ circles.map = function(point) {
             }
         }
         if (!mapped) {
+            // inversion needed if all circles map inside out
+            if (circles.finalInversion) {
+                circles.collection[0].invert(point);
+            }
             return;
         }
     }

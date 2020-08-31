@@ -188,14 +188,14 @@ export function ParamController(gui, domElement, argObjects) {
                 break;
             case "boolean":
                 const booleanButton = new BooleanButton(this.domElement);
-               if (guiUtils.isArray(args.buttonText)){
-                    booleanButton.setTexts(args.buttonText[0],args.buttonText[1]);
+                if (guiUtils.isArray(args.buttonText)) {
+                    booleanButton.setTexts(args.buttonText[0], args.buttonText[1]);
                 }
                 booleanButton.setWidth(guiUtils.check(args.width, this.design.booleanButtonWidth));
                 booleanButton.setFontSize(this.design.buttonFontSize);
                 guiUtils.hSpace(this.domElement, ParamGui.spaceWidth);
                 this.uiElement = booleanButton;
-                 this.setupOnChange();
+                this.setupOnChange();
                 this.setupOnInteraction();
                 if (guiUtils.isBoolean(this.initialValue)) {
                     this.setValueOnly(this.initialValue); // that is safe, does not change value
@@ -542,11 +542,10 @@ ParamController.prototype.addHelp = function(message) {
  * @param {String|number} name
  * @param {whatever} value - optional, default value is name
  */
-
 ParamController.prototype.addOption = function(name, value = name) {
     if (this.type === "selection") {
         this.uiElement.addOption(name, value);
-        // to be safe: adding an option to an empty selecction -> choose this option
+        // to be safe: adding an option to an empty selection -> choose this option
         if (this.uiElement.values.length === 1) {
             this.setValueOnly(value);
         }
@@ -554,7 +553,6 @@ ParamController.prototype.addOption = function(name, value = name) {
         console.error('ParamController#addOption: Only for controllers of type "selection"');
         console.log('this controller type is "' + this.type + '"');
     }
-
 };
 
 // setting and getting values. 
@@ -806,6 +804,20 @@ ParamController.prototype.hSpace = function(width) {
 };
 
 /**
+ * layout: add a span with text
+ * @method ParamController#addSpan
+ * @param {String} innerHTML - with HTML markup
+ * @return the span, for changing the text
+ */
+ParamController.prototype.addSpan = function(innerHTML) {
+    const span = document.createElement("span");
+    span.innerHTML = innerHTML;
+    span.style.fontSize = this.design.labelFontSize + "px";
+    this.domElement.appendChild(span);
+    return span;
+};
+
+/**
  * register the parent domElement of this controller in guiUtils for styling
  * see docu of guiUtils.style
  * use: controller.style().backgroundColor("red")
@@ -857,6 +869,35 @@ ParamController.prototype.deleteLabel = function() {
         this.label = false;
     }
     return this;
+};
+
+// for the selection
+//===============================================
+
+/**
+ * make that selection accepts user defined objects from .txt files with JSON
+ * @method ParamController#acceptUserObjects
+ */
+ParamController.prototype.acceptUserObjects = function() {
+    if (this.type === "selection") {
+        this.domElement.appendChild(document.createElement('br'));
+        // alignment
+        const dummyLabel = document.createElement("span");
+        dummyLabel.style.display = "inline-block";
+        dummyLabel.style.minWidth = this.design.minLabelWidth + "px";
+        dummyLabel.style.paddingLeft = this.design.spaceWidth + "px";
+        dummyLabel.style.paddingRight = this.design.spaceWidth + "px";
+        this.domElement.appendChild(dummyLabel);
+        // adding the button, text: SelectValues.addObjectsButtonText
+        const addButton = this.uiElement.makeAddObjectsButton(this.domElement);
+        addButton.setFontSize(this.design.buttonFontSize);
+        const controller = this;
+        addButton.onInteraction = function() {
+            controller.interaction();
+        };
+    } else {
+        console.error('ParamController.acceptUserObject: Only for "selection" controllers. Type of this controller: "' + this.type + '"');
+    }
 };
 
 // for the number controller

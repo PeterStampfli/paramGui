@@ -80,19 +80,19 @@ export function Select(parent) {
     };
 
     this.element.onwheel = function(event) {
-         if (select.active) {
-       event.preventDefault();
-        event.stopPropagation();
         if (select.active) {
-            select.onInteraction();
-            if (event.deltaY > 0) {
-                select.changeIndex(1);
-            } else {
-                select.changeIndex(-1);
+            event.preventDefault();
+            event.stopPropagation();
+            if (select.active) {
+                select.onInteraction();
+                if (event.deltaY > 0) {
+                    select.changeIndex(1);
+                } else {
+                    select.changeIndex(-1);
+                }
             }
+            return false;
         }
-        return false;
-    }
     };
 
 }
@@ -124,7 +124,7 @@ Select.prototype.updateStyle = function() {
  * setup the color styles defaults, use for other buttons too
  * @method Select#colorStyleDefaults
  */
-Select.prototype.colorStyleDefaults = Button.prototype.colorStyleDefaults ;
+Select.prototype.colorStyleDefaults = Button.prototype.colorStyleDefaults;
 
 /**
  * set fontsize of the button, in px
@@ -155,6 +155,7 @@ Select.prototype.addOptions = function(names) {
         } else if (typeof names === "object") {
             this.addOptions(Object.keys(names));
         } else {
+            // here we have a simple value (number, string, boolean), make it an option
             const option = document.createElement("option");
             option.textContent = "" + names;
             this.element.appendChild(option);

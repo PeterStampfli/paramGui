@@ -8,7 +8,9 @@ import {
 from "../libgui/modules.js";
 
 import {
-    circles
+    circles,
+    intersections,
+    basic
 } from './modules.js';
 
 // beware of hitting the circle center
@@ -23,19 +25,10 @@ Circle.lineWidth = 2;
 Circle.highlightLineWidth = 6;
 Circle.highlightColor = 'yellow';
 Circle.otherHighlightColor = 'white';
+Circle.frozenHighlightColor = '#ffbbbb';
 
 // selection, regionwidth in px
 Circle.selectWidth = Circle.highlightLineWidth;
-
-/**
- * the (re)drawing routine for anything, called after some circle changes
- * to be defined, depending on what to draw
- * typically calls map.draw
- * @method Circle.draw
- */
-Circle.draw = function() {
-    console.log('Circle.draw');
-};
 
 /**
  * a circle as a building block for kaleidoscopes
@@ -46,6 +39,7 @@ Circle.draw = function() {
  */
 export function Circle(parentGui, properties) {
     // default parameters
+    this.canChange = true; // determines if parameters are frozen
     this.radius = 1;
     this.centerX = 0;
     this.centerY = 0;
@@ -64,10 +58,26 @@ export function Circle(parentGui, properties) {
 
     // the controllers
     // they do not directly change the parameter value of this circle
-    // depending on intersections controllers try to change parameters
-    // if it does not work, we still have the old values
+    // controllers try to change parameters
+    // if it does not work because of intersections, we still have the old values
     const circle = this;
     this.gui = parentGui.addFolder('Circle ' + this.id);
+
+    BooleanButton.greenRedBackground();
+    this.canChangeController = this.gui.add({
+        type: 'boolean',
+        params: this,
+        property: 'canChange',
+        labelText: 'parameters',
+        width: 100,
+        buttonText: ['can change', 'frozen'],
+        onChange: function() {
+            circle.activateUI();
+            intersections.activateUI();
+            circle.mapDirectionController.setActive(circle.canChange);
+            basic.drawCirclesIntersections(); // no new map
+        }
+    });
 
     this.radiusController = this.gui.add({
         type: 'number',
@@ -117,7 +127,7 @@ export function Circle(parentGui, properties) {
         labelText: '',
         onChange: function() {
             circles.setSelected(circle);
-            Circle.draw();
+            basic.drawMapChanged(); // changes map
         }
     });
     this.colorController = this.gui.add({
@@ -125,10 +135,30 @@ export function Circle(parentGui, properties) {
         params: this,
         property: 'color',
         onChange: function() {
-            Circle.draw();
+            circles.setSelected(circle);
+            basic.drawCirclesIntersections(); //no new map
         }
     });
 }
+
+/**
+ * get properties of this circle as an object
+ * @method Circle#getProperties
+ * @return object, with all properties needed to build the same circle
+ */
+Circle.prototype.getProperties = function() {
+    const properties = {
+        radius: this.radius,
+        centerX: this.centerX,
+        centerY: this.centerY,
+        canChange: this.canChange,
+        isInsideOutMap: this.isInsideOutMap,
+        isMapping: this.isMapping,
+        color: this.color,
+        id: this.id
+    };
+    return properties;
+};
 
 /**
  * update the ui values
@@ -144,11 +174,12 @@ Circle.prototype.updateUI = function() {
 
 /**
  * activate ui depending on number of intersections
+ * and if canChange is true, such that we can frieze the circle parameters
  * call when number of intersections changes
  * @method Circle.activateUI
  */
 Circle.prototype.activateUI = function() {
-    if (this.intersections.length < 3) {
+    if ((this.intersections.length < 3) && (this.canChange)) {
         this.radiusController.setActive(true);
         this.centerXController.setActive(true);
         this.centerYController.setActive(true);
@@ -162,7 +193,8 @@ Circle.prototype.activateUI = function() {
 /**
  * adjust the radius of a circle with only one intersection
  * use this for a given position of the center
- * return if successful
+ * return true if successful, false if fails
+ * does not change the circle for fail
  * @method Circle#adjustRadiusOneIntersection
  * @param {number} centerX
  * @param {number} centerY
@@ -194,7 +226,7 @@ Circle.prototype.adjustRadiusOneIntersection = function(centerX, centerY) {
     const a = 1;
     const b = coeff;
     const c = otherCircle.radius2 - distance2;
-    // solve, catch fails (no real solution, no positve solution)
+    // solve, catch fails (no real solution, no positive solution)
     let success = true;
     const data = {};
     if (guiUtils.quadraticEquation(a, b, c, data)) {
@@ -233,7 +265,7 @@ Circle.prototype.adjustRadiusOneIntersection = function(centerX, centerY) {
  * @return true, always successful
  */
 Circle.prototype.adjustPositionOneIntersection = function() {
-    const distance = this.intersections[0].distanceBetweenCenters();
+    const distance = this.intersections[0].requireDistanceBetweenCenters();
     const otherCircle = this.intersections[0].getOtherCircle(this);
     const dx = this.centerX - otherCircle.centerX;
     const dy = this.centerY - otherCircle.centerY;
@@ -247,7 +279,8 @@ Circle.prototype.adjustPositionOneIntersection = function() {
 /**
  * for two intersections and a given radius
  * adjust the center position, set radius (if it is too small)
- * return if successful (and something probaly changed)
+ * return true if successful, false if fails
+ * does not change the circle for fail
  * @method Circle#adjustPositionTwoIntersections
  * @param {number} radius
  * @return boolean success
@@ -271,8 +304,8 @@ Circle.prototype.adjustPositionTwoIntersections = function(radius) {
     // the actual distances between centers of other circles
     const distanceCenter1To2 = Math.hypot(center1To2X, center1To2Y);
     // the required distances from center of this circle to the other circles
-    let distanceToCenter1 = intersection1.distanceBetweenCenters();
-    let distanceToCenter2 = intersection2.distanceBetweenCenters();
+    let distanceToCenter1 = intersection1.requireDistanceBetweenCenters();
+    let distanceToCenter2 = intersection2.requireDistanceBetweenCenters();
     // check if we can form a triangle: every side of the triangle has to be smaller than the sum of the other two side
     // if not: we have to increase the radius. Minimum radius from all three centers on a line ?
     // Because the degenerate triangle is the most extreme case with respect to the triangle rule.
@@ -312,8 +345,8 @@ Circle.prototype.adjustPositionTwoIntersections = function(radius) {
             this.radius = radius;
             this.radius2 = radius * radius;
             // recalculate distances to the other centers
-            distanceToCenter1 = intersection1.distanceBetweenCenters();
-            distanceToCenter2 = intersection2.distanceBetweenCenters();
+            distanceToCenter1 = intersection1.requireDistanceBetweenCenters();
+            distanceToCenter2 = intersection2.requireDistanceBetweenCenters();
         } else {
             //  console.error('Circle#centerPositionsTwoIntersections: Quadratic equation for minimum radius has no real solution! Intersection:');
             //  console.log(this);
@@ -324,6 +357,7 @@ Circle.prototype.adjustPositionTwoIntersections = function(radius) {
         }
     }
     // midpoint of the two solutions on the line between the two other centers
+    // distance from center of circle 1 to the midpoint
     const parallelPosition = 0.5 * (distanceCenter1To2 + (distanceToCenter1 * distanceToCenter1 - distanceToCenter2 * distanceToCenter2) / distanceCenter1To2);
     let xi = parallelPosition / distanceCenter1To2;
     const px = center1X + center1To2X * xi;
@@ -353,7 +387,8 @@ Circle.prototype.adjustPositionTwoIntersections = function(radius) {
 /**
  * circle with two intersections, try a given new position, 
  * adjust mainly circle radius and partly position to intersections
- * return if successful, it changed circle position or radius
+ * return true if successful, false if fails
+ * does not change the circle for fail
  * @method Circle#adjustRadiusTwoIntersections
  * @param {number} centerX
  * @param {number} centerY
@@ -425,6 +460,8 @@ Circle.prototype.adjustRadiusTwoIntersections = function(centerX, centerY) {
  * there are two possible solutions for the radius
  * the resulting centers may be close to each other
  * take the radius that is closer to the current radius
+ * return true if successful, false if fails
+ * does not change the circle for fail
  * @method Circle#adjustThreeIntersections
  * @param {object} pos1 - with x- and y fields
  * @param {object} pos2 - with x- and y fields
@@ -507,34 +544,38 @@ Circle.prototype.adjustThreeIntersections = function(pos1, pos2) {
 
 /**
  * try a given value for the radius, adjust circle radius and position to intersections
- * if fails do not change current radius
+ * if fails, do not change current radius
+ * does nothing for three or mor intersections
  * if success update UI to new values and draw image
  * @method tryRadius
  * @param {number} radius
  */
 Circle.prototype.tryRadius = function(radius) {
-    let success = true;
-    switch (this.intersections.length) {
-        case 0:
-            this.radius = radius;
-            this.radius2 = radius * radius;
-            break;
-        case 1:
-            // keep the radius, change distance to other circle, always possible
-            this.radius = radius;
-            this.radius2 = radius * radius;
-            this.adjustPositionOneIntersection();
-            break;
-        case 2:
-            success = this.adjustPositionTwoIntersections(radius);
-            break;
-        case 3:
-            success = false; // not possible
-            break;
-    }
-    if (success) {
-        this.updateUI();
-        Circle.draw();
+    if (this.canChange) {
+        let success = true;
+        switch (this.intersections.length) {
+            case 0:
+                this.radius = radius;
+                this.radius2 = radius * radius;
+                break;
+            case 1:
+                // keep the radius, change distance to other circle, always possible
+                this.radius = radius;
+                this.radius2 = radius * radius;
+                this.adjustPositionOneIntersection();
+                break;
+            case 2:
+                success = this.adjustPositionTwoIntersections(radius);
+                break;
+            default:
+                success = false; // not possible for three or more intersections
+                break;
+        }
+        if (success) {
+            this.updateUI();
+            intersections.activateUI();
+            basic.drawMapChanged();
+        }
     }
 };
 
@@ -548,33 +589,38 @@ Circle.prototype.tryRadius = function(radius) {
  * @return boolean true if successful and case solved
  */
 Circle.prototype.tryPosition = function(centerX, centerY) {
-    let success = true;
-    switch (this.intersections.length) {
-        case 0:
-            this.centerX = centerX;
-            this.centerY = centerY;
-            break;
-        case 1:
-            // first try to adjust the radius for the new position
-            if (!this.adjustRadiusOneIntersection(centerX, centerY)) {
-                // if it failed, keep radius and adjust distance between the circles
+    if (this.canChange) {
+        let success = true;
+        switch (this.intersections.length) {
+            case 0:
                 this.centerX = centerX;
                 this.centerY = centerY;
-                this.adjustPositionOneIntersection();
-            }
-            break;
-        case 2:
-            success = this.adjustRadiusTwoIntersections(centerX, centerY);
-            break;
-        case 3:
-            success = false; // never possible
-            break;
+                break;
+            case 1:
+                // first try to adjust the radius for the new position
+                if (!this.adjustRadiusOneIntersection(centerX, centerY)) {
+                    // if it failed, keep radius and adjust distance between the circles
+                    this.centerX = centerX;
+                    this.centerY = centerY;
+                    this.adjustPositionOneIntersection();
+                }
+                break;
+            case 2:
+                success = this.adjustRadiusTwoIntersections(centerX, centerY);
+                break;
+            default:
+                success = false; // not possible for three or more intersections
+                break;
+        }
+        if (success) {
+            this.updateUI();
+            intersections.activateUI();
+            basic.drawMapChanged();
+        }
+        return success;
+    } else {
+        return false;
     }
-    if (success) {
-        this.updateUI();
-        Circle.draw();
-    }
-    return success;
 };
 
 /**
@@ -585,64 +631,38 @@ Circle.prototype.tryPosition = function(centerX, centerY) {
  * adjust radius and position of circle for three intersections
  * update UI if successful
  * update output image elsewhere
- * return if successful
+ * return true if successful, false if fails
+ * does not change the circle for fail
  * @method Circle#adjustToIntersections
  * @return boolean, true if success, false if something failed
  */
 Circle.prototype.adjustToIntersections = function() {
-    let success = true;
-    switch (this.intersections.length) {
-        case 0:
-            break;
-        case 1:
-            // one intersection is 'trivial', we can keep the radius and change the distance to the other circle
-            this.adjustPositionOneIntersection();
-            break;
-        case 2:
-            success = this.adjustPositionTwoIntersections(this.radius);
-            break;
-        case 3:
-            success = this.adjustThreeIntersections();
-            break;
+    if (this.canChange) {
+        let success = true;
+        switch (this.intersections.length) {
+            case 0:
+                break;
+            case 1:
+                // one intersection is 'trivial', we can keep the radius and change the distance to the other circle
+                this.adjustPositionOneIntersection();
+                break;
+            case 2:
+                success = this.adjustPositionTwoIntersections(this.radius);
+                break;
+            case 3:
+                success = this.adjustThreeIntersections();
+                break;
+            default:
+                success = false; // not possible for more than 3 intersections
+                break;
+        }
+        if (success) {
+            this.updateUI();
+        }
+        return success;
+    } else {
+        return false;
     }
-    if (success) {
-        this.updateUI();
-    }
-    return success;
-};
-
-/**
- * adjust circle to intersections when adding intersection or changing order
- * nothing to do if there is no intersection
- * adjust radius if there is only one intersection (increase radius if too small)
- * adjust radius of circle if there are two intersections
- * adjust radius and position of circle for three intersections
- * update UI if successful
- * update output image elsewhere
- * return if successful
- * @method Circle#adjustToIntersections
- * @return boolean, true if success, false if something failed
- */
-Circle.prototype.adjustRadiusToIntersections = function() {
-    let success = true;
-    switch (this.intersections.length) {
-        case 0:
-            break;
-        case 1:
-            // one intersection is 'trivial', we can keep the radius and change the distance to the other circle
-            this.adjustRadiusOneIntersection(this.centerX, this.centerY);
-            break;
-        case 2:
-            success = this.adjustRadiusTwoIntersections(this.centerX, this.centerY);
-            break;
-        case 3:
-            success = this.adjustThreeIntersections();
-            break;
-    }
-    if (success) {
-        this.updateUI();
-    }
-    return success;
 };
 
 /**
@@ -659,34 +679,41 @@ Circle.prototype.tryMapDirection = function(isInsideOutMap) {
     let success = this.adjustToIntersections();
     if (success) {
         this.updateUI();
-        Circle.draw();
+        basic.drawMapChanged();
     } else {
         this.isInsideOutMap = currentIsInsideOutMap; // fail: restore value
-        this.updateUI();
+        this.updateUI(); // reset the shown map direction value
     }
 };
 
 /**
+ * more checks: Circle can adjust to a new intersection
+ * means it can change and has less than 3 intersections
+ * @method Circle#canAdjust
+ * @return boolean, true if circle can adjust
+ */
+Circle.prototype.canAdjust = function() {
+    return (this.canChange) && (this.intersections.length < 3);
+};
+
+/**
  * add an intersection
+ * we can have more than 3, but then this circle cannot adjust to intersections
  * @method Circle#addIntersection
  * @param {Intersection} intersection
  */
 Circle.prototype.addIntersection = function(intersection) {
-    if (this.intersections.length > 2) {
-        console.error('Circle#addIntersection: Circle has 3 intersections, cannot add more. Intersection:');
-        console.log(intersection);
-        console.log(this.intersections);
-    } else {
-        for (var i = 0; i < this.intersections.length; i++) {
-            if (this === this.intersections[i].getOtherCircle(this)) {
-                console.error('Circle#addIntersection: This intersection is already there:');
-                console.log(intersection);
-                console.log(this.intersections);
-            }
+    // for safety, check if intersection already there
+    for (var i = 0; i < this.intersections.length; i++) {
+        if (this === this.intersections[i].getOtherCircle(this)) {
+            console.error('Circle#addIntersection: This intersection is already there:');
+            console.log(intersection);
+            console.log(this.intersections);
+            return;
         }
-        this.intersections.push(intersection);
-        this.activateUI();
     }
+    this.intersections.push(intersection);
+    this.activateUI();
 };
 
 /**
@@ -723,11 +750,19 @@ Circle.prototype.draw = function(highlight = 0) {
             break;
         case 1:
             output.setLineWidth(Circle.highlightLineWidth);
-            context.strokeStyle = Circle.highlightColor;
+            if ((this.intersections.length < 3) && (this.canChange)) {
+                context.strokeStyle = Circle.highlightColor;
+            } else {
+                context.strokeStyle = Circle.frozenHighlightColor;
+            }
             break;
         case 2:
             output.setLineWidth(Circle.highlightLineWidth);
-            context.strokeStyle = Circle.otherHighlightColor;
+            if ((this.intersections.length < 3) && (this.canChange)) {
+                context.strokeStyle = Circle.otherHighlightColor;
+            } else {
+                context.strokeStyle = Circle.frozenHighlightColor;
+            }
             break;
     }
     context.beginPath();
@@ -804,50 +839,71 @@ Circle.prototype.map = function(position) {
 };
 
 /**
+ * invert at the circle, used to get always a good image
+ * @method Circle.invert
+ * @param {object} position - with x and y fields, will be changed
+ */
+Circle.prototype.invert = function(position) {
+    const dx = position.x - this.centerX;
+    const dy = position.y - this.centerY;
+    const dr2 = dx * dx + dy * dy;
+    const factor = this.radius2 / Math.max(dr2, epsilon2);
+    position.x = this.centerX + factor * dx;
+    position.y = this.centerY + factor * dy;
+};
+/**
  * dragging the circle
  * action depends on intersections
  * @method Circle#dragAction
  * @param{object} event
  */
 Circle.prototype.dragAction = function(event) {
-    let success = this.tryPosition(this.centerX + event.dx, this.centerY + event.dy);
-    if (!success && (this.intersections.length === 2)) {
-        // try tunneling
-        // get basic data: unit vector between the two other circles
-        // repeats work done before, but is not expensive
-        const intersection1 = this.intersections[0];
-        const intersection2 = this.intersections[1];
-        const otherCircle1 = intersection1.getOtherCircle(this);
-        const otherCircle2 = intersection2.getOtherCircle(this);
-        const center1X = otherCircle1.centerX;
-        const center1Y = otherCircle1.centerY;
-        const center2X = otherCircle2.centerX;
-        const center2Y = otherCircle2.centerY;
-        let center1To2X = center2X - center1X;
-        let center1To2Y = center2Y - center1Y;
-        // the actual distances between centers of other circles
-        const distanceCenter1To2 = Math.hypot(center1To2X, center1To2Y);
-        // normalized distance vector
-        center1To2X /= distanceCenter1To2;
-        center1To2Y /= distanceCenter1To2;
-        const c1ToMLength = center1To2X * (this.centerX - center1X) + center1To2Y * (this.centerY - center1Y);
-        const mX = center1X + c1ToMLength * center1To2X;
-        const mY = center1Y + c1ToMLength * center1To2Y;
-        const flippedX = 2 * mX - this.centerX;
-        const flippedY = 2 * mY - this.centerY;
-        this.tryPosition(flippedX + event.dx, flippedY + event.dy);
+    if (this.canChange) {
+        let success = this.tryPosition(this.centerX + event.dx, this.centerY + event.dy);
+        if (!success && (this.intersections.length === 2)) {
+            // dragging fails for a circle with two intersections
+            // because the two other circles are intersecting and this circle falls into their intersection
+            // and this circle cannot be there
+            // try tunneling: mirror current position of this circle at line
+            // get basic data: unit vector between the two other circles
+            // repeats work done before, but is not expensive
+            const intersection1 = this.intersections[0];
+            const intersection2 = this.intersections[1];
+            const otherCircle1 = intersection1.getOtherCircle(this);
+            const otherCircle2 = intersection2.getOtherCircle(this);
+            const center1X = otherCircle1.centerX;
+            const center1Y = otherCircle1.centerY;
+            const center2X = otherCircle2.centerX;
+            const center2Y = otherCircle2.centerY;
+            let center1To2X = center2X - center1X;
+            let center1To2Y = center2Y - center1Y;
+            // the actual distances between centers of other circles
+            const distanceCenter1To2 = Math.hypot(center1To2X, center1To2Y);
+            // normalized distance vector
+            center1To2X /= distanceCenter1To2;
+            center1To2Y /= distanceCenter1To2;
+            const c1ToMLength = center1To2X * (this.centerX - center1X) + center1To2Y * (this.centerY - center1Y);
+            const mX = center1X + c1ToMLength * center1To2X;
+            const mY = center1Y + c1ToMLength * center1To2Y;
+            const flippedX = 2 * mX - this.centerX;
+            const flippedY = 2 * mY - this.centerY;
+            // try dragging the circle away from its mirrored position
+            this.tryPosition(flippedX + event.dx, flippedY + event.dy);
+        }
     }
 };
 
 /**
- * mouse wheel on the circle
- * action depends on intersections
+ * mouse wheel on the circle, changing raadius
+ * effective action depends on intersections
  * @method Circle#wheelAction
  * @param{object} event
  */
 Circle.prototype.wheelAction = function(event) {
-    const zoomFactor = (event.wheelDelta > 0) ? Circle.zoomFactor : 1 / Circle.zoomFactor;
-    this.tryRadius(this.radius * zoomFactor);
+    if (this.canChange) {
+        const zoomFactor = (event.wheelDelta > 0) ? Circle.zoomFactor : 1 / Circle.zoomFactor;
+        this.tryRadius(this.radius * zoomFactor);
+    }
 };
 
 /**

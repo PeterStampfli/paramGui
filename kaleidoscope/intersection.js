@@ -2,24 +2,20 @@
 
 import {
     output,
-    guiUtils
+    guiUtils,
+    map
 }
 from "../libgui/modules.js";
 
 import {
+    Circle,
     circles,
     intersections,
     basic
 } from './modules.js';
 
-// parameters for drawing, change if you do not like it 
-Intersection.radius = 15; // for drawing, in pixels
-Intersection.selectionRadius = 18; // for selecting, in pixels
-Intersection.lineWidth = 2;
-Intersection.highlightLineWidth = 6;
-Intersection.highlightColor = 'yellow';
-Intersection.frozenHighlightColor = '#ffbbbb';
-Intersection.maxCorners = 16; // polygons with more corners will be circles
+// polygons with more corners will be circles
+Intersection.maxCorners = 16;
 
 /**
  * intersection between circles, making a definite n-fold dihedral symmetry
@@ -80,11 +76,13 @@ Intersection.prototype.updateUI = function() {
 };
 
 /**
- * activate ui depending on state of circles
+ * activate ui depending on state of circles: At least one can change and has 3 intersections or less
  * @method Intersection.activateUI
  */
 Intersection.prototype.activateUI = function() {
-    this.nController.setActive(this.circle1.canAdjust() || this.circle2.canAdjust());
+    const circle1Can = this.circle1.canChange && (this.circle1.intersections.length <= 3);
+    const circle2Can = this.circle2.canChange && (this.circle1.intersections.length <= 3);
+    this.nController.setActive(circle1Can || circle2Can);
 };
 
 /**
@@ -106,7 +104,7 @@ Intersection.prototype.requireDistanceBetweenCenters = function() {
  * @method Intersection.estimateN
  * @param {Circle} circle1
  * @param {Circle} circle2
- * @return number, if >=2 estimate for the order
+ * @return number, if >=2 this is an estimate for the order, if <0 then there is no dihedral group
  */
 Intersection.estimateN = function(circle1, circle2) {
     if (guiUtils.isObject(circle1) && guiUtils.isObject(circle2)) {
@@ -115,7 +113,7 @@ Intersection.estimateN = function(circle1, circle2) {
         const d2 = dx * dx + dy * dy;
         const sign = (circle1.isInsideOutMap === circle2.isInsideOutMap) ? 1 : -1;
         const cosAlpha = 0.5 * (d2 - circle1.radius2 - circle2.radius2) / circle1.radius / circle2.radius / sign;
-        if ((cosAlpha < -0.1) || (cosAlpha > 1.1)) {
+        if ((cosAlpha < -0.2) || (cosAlpha > 1.1)) {
             return -1;
         } else {
             // safe limits for acos function, maximum n=20 for the order
@@ -170,9 +168,9 @@ Intersection.prototype.tryN = function(n) {
     this.n = Math.max(2, Math.round(n));
     this.selectCircles();
     const selected = circles.selected;
-    // switch circles if selected circcle has more intersections than otherSelected
+    // switch circles if selected circle has more intersections than otherSelected
     if (circles.selected.intersections.length > circles.otherSelected.intersections.length) {
-        circles.setSelected(circles.otherSelected); 
+        circles.setSelected(circles.otherSelected);
     }
     // try to adjust selected circle
     let success = circles.selected.adjustToIntersections();
@@ -181,7 +179,7 @@ Intersection.prototype.tryN = function(n) {
         circles.setSelected(circles.otherSelected);
         success = circles.selected.adjustToIntersections();
     }
-        // if that faails too, restore things
+    // if that fails too, restore things
     if (!success) {
         circles.setSelected(selected);
         this.n = currentN;
@@ -296,25 +294,26 @@ Intersection.prototype.drawPolygon = function(center, radius) {
 Intersection.prototype.draw = function(highlight = 0) {
     this.determinePositions(pos1, pos2);
     const context = output.canvasContext;
+    const radius = 7 * map.linewidth;
     if (highlight === 0) {
-        output.setLineWidth(Intersection.lineWidth);
+        output.setLineWidth(map.linewidth);
         context.strokeStyle = this.circle1.color;
-        this.drawPolygon(pos1, Intersection.radius);
-        this.drawPolygon(pos2, Intersection.radius);
+        this.drawPolygon(pos1, radius);
+        this.drawPolygon(pos2, radius);
         context.strokeStyle = this.circle2.color;
-        this.drawPolygon(pos1, Intersection.radius + 2 * Intersection.lineWidth);
-        this.drawPolygon(pos2, Intersection.radius + 2 * Intersection.lineWidth);
+        this.drawPolygon(pos1, radius + 2 * map.linewidth);
+        this.drawPolygon(pos2, radius + 2 * map.linewidth);
     } else {
-        output.setLineWidth(Intersection.highlightLineWidth);
+        output.setLineWidth(3 * map.linewidth);
         if ((this.circle1.canChange) || (this.circle2.canChange)) {
-            context.strokeStyle = Intersection.highlightColor;
+            context.strokeStyle = Circle.highlightColor;
         } else {
-            context.strokeStyle = Intersection.frozenHighlightColor;
+            context.strokeStyle = Circle.frozenHighlightColor;
         }
-        this.drawPolygon(pos1, Intersection.radius);
-        this.drawPolygon(pos2, Intersection.radius);
-        this.drawPolygon(pos1, Intersection.radius + 2 * Intersection.lineWidth);
-        this.drawPolygon(pos2, Intersection.radius + 2 * Intersection.lineWidth);
+        this.drawPolygon(pos1, radius);
+        this.drawPolygon(pos2, radius);
+        this.drawPolygon(pos1, radius + 2 * map.linewidth);
+        this.drawPolygon(pos2, radius + 2 * map.linewidth);
     }
 };
 
@@ -325,7 +324,7 @@ Intersection.prototype.draw = function(highlight = 0) {
  * @return boolean, true if selected
  */
 Intersection.prototype.isSelected = function(position) {
-    let selectionRadius2 = Intersection.selectionRadius * output.coordinateTransform.totalScale;
+    let selectionRadius2 = 9 * map.linewidth * output.coordinateTransform.totalScale;
     selectionRadius2 = selectionRadius2 * selectionRadius2;
     this.determinePositions(pos1, pos2);
     let dx = position.x - pos1.x;

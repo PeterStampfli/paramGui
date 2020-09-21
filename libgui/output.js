@@ -10,7 +10,8 @@ import {
     CoordinateTransform,
     Pixels,
     MouseEvents,
-    ParamGui
+    ParamGui,
+    BooleanButton
 }
 from "./modules.js";
 
@@ -276,6 +277,8 @@ output.createCanvas = function(gui, folderName) {
         return;
     }
     output.canvas = document.createElement("canvas");
+    output.canvasBackgroundColor = '#0000bb';
+    output.canvas.style.backgroundColor = output.canvasBackgroundColor;
     output.canvasContext = output.canvas.getContext("2d");
     if (guiUtils.isDefined(folderName)) {
         gui = gui.addFolder(folderName);
@@ -337,6 +340,7 @@ output.createCanvas = function(gui, folderName) {
         }
     });
 
+    BooleanButton.greenRedBackground();
     autoResizeController = gui.add({
         type: "boolean",
         labelText: "auto resize canvas",
@@ -386,7 +390,17 @@ output.createCanvas = function(gui, folderName) {
             }
         }
     }).addHelp('Switches browser to full screen mode and back.');
-
+    // note that changing the background color has no effect on *.jpg images
+    // and all alpha=0 pixels become opaque black in *.jpg output
+    output.canvasBackgroundColorController = gui.add({
+        type: 'color',
+        params: output,
+        property: 'canvasBackgroundColor',
+        labelText: 'background',
+        onChange: function() {
+            output.canvas.style.backgroundColor = output.canvasBackgroundColor;
+        }
+    });
     if (!output.div) {
         output.createDiv();
     }
@@ -549,8 +563,7 @@ output.addCoordinateTransform = function(gui, withRotation = false) {
     };
 
     // switching with ctrl key from coordinate transformation to other actions
-    // changes cursor
-    // terminate events ?
+    // modifying things with shift key
     // things can become confusing if ctrl&mousebutton pressed, ctrl released, mouse moves and image gets dragged
     // thus ctrl key up or down event sets mouse pressed to false
     // selected elements should stay selected even if ctrl-key goes up
@@ -562,6 +575,9 @@ output.addCoordinateTransform = function(gui, withRotation = false) {
             mouseEvents.setPressedFalse();
             makeTransformedMouseEvent(transformedEvent, mouseEvents);
             output.ctrlKeyDownAction(transformedEvent);
+        } else if (event.key === 'Shift') {
+            makeTransformedMouseEvent(transformedEvent, mouseEvents);
+            output.shiftKeyDownAction(transformedEvent);
         }
     }, false);
 
@@ -569,7 +585,11 @@ output.addCoordinateTransform = function(gui, withRotation = false) {
         if (event.key === 'Control') {
             output.canvas.style.cursor = "pointer";
             mouseEvents.setPressedFalse();
+            makeTransformedMouseEvent(transformedEvent, mouseEvents);
             output.ctrlKeyUpAction(transformedEvent);
+        } else if (event.key === 'Shift') {
+            makeTransformedMouseEvent(transformedEvent, mouseEvents);
+            output.shiftKeyUpAction(transformedEvent);
         }
     }, false);
 
@@ -584,6 +604,9 @@ output.addCoordinateTransform = function(gui, withRotation = false) {
     // actions upon ctrl key down/up
     output.ctrlKeyUpAction = function(event) {};
     output.ctrlKeyDownAction = function(event) {};
+    // actions upon shift key down/up
+    output.shiftKeyUpAction = function(event) {};
+    output.shiftKeyDownAction = function(event) {};
 
     // change the transform or do something else
 
@@ -741,18 +764,20 @@ output.setLineWidth = function(width) {
  * @param {ParamGui} gui
  */
 const grid = {};
-grid.on = true;
+output.grid = grid;
+grid.on = false;
 grid.interval = 1;
 grid.color = '#000000';
 grid.axisWidth = 6;
 grid.lineWidth = 3;
 
 output.addGrid = function(gui) {
+    BooleanButton.greenRedBackground();
     const onOffController = gui.add({
         type: 'boolean',
         params: grid,
         property: 'on',
-        labelText: '',
+        labelText: 'grid',
         onChange: function() {
             output.drawGridChanged();
         }
@@ -771,6 +796,7 @@ output.addGrid = function(gui) {
         type: 'color',
         params: grid,
         property: 'color',
+        labelText: '',
         onChange: function() {
             output.drawGridChanged();
         }

@@ -48,3 +48,28 @@ export {
     presets
 }
 from "./presets.js";
+
+export {
+    regions
+}
+from "./regions.js";
+
+export {
+    Corner
+}
+from "./corner.js";
+
+export {
+    Line
+}
+from "./line.js";
+
+export {
+    Polygon
+}
+from "./polygon.js";
+
+export {
+    Side
+}
+from "./side.js";

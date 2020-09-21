@@ -3,7 +3,8 @@
 import {
     guiUtils,
     BooleanButton,
-    output
+    output,
+    map
 }
 from "../libgui/modules.js";
 
@@ -21,14 +22,9 @@ const epsilon2 = epsilon * epsilon;
 Circle.zoomFactor = 1.04;
 
 // parameters for drawing, change if you do not like it 
-Circle.lineWidth = 2;
-Circle.highlightLineWidth = 6;
 Circle.highlightColor = 'yellow';
 Circle.otherHighlightColor = 'white';
 Circle.frozenHighlightColor = '#ffbbbb';
-
-// selection, regionwidth in px
-Circle.selectWidth = Circle.highlightLineWidth;
 
 /**
  * a circle as a building block for kaleidoscopes
@@ -136,7 +132,11 @@ export function Circle(parentGui, properties) {
         property: 'color',
         onChange: function() {
             circles.setSelected(circle);
-            basic.drawCirclesIntersections(); //no new map
+            if (map.whatToShowController.getValue() === map.callDrawIndrasPearls) {
+                basic.drawImageChanged();
+            } else {
+                basic.drawCirclesIntersections();
+            }
         }
     });
 }
@@ -188,6 +188,23 @@ Circle.prototype.activateUI = function() {
         this.centerXController.setActive(false);
         this.centerYController.setActive(false);
     }
+};
+
+/**
+ * for checking if we can have an intersection:
+ * do the circles really intersect ?
+ * using the triangle rule "for all three sides"
+ * @method Circle#intersectsCircle
+ * @param {Circle} circle
+ * @return boolean, true if the circles intersect
+ */
+Circle.prototype.intersectsCircle = function(circle) {
+    const distance = Math.hypot(this.centerX - circle.centerX, this.centerY - circle.centerY);
+    const safetyFactor = 0.999; // float numbers are never accurate
+    let intersects = ((this.radius + circle.radius) >= distance * safetyFactor);
+    intersects = intersects && ((this.radius + distance) >= circle.radius * safetyFactor);
+    intersects = intersects && ((circle.radius + distance) >= this.radius * safetyFactor);
+    return intersects;
 };
 
 /**
@@ -687,16 +704,6 @@ Circle.prototype.tryMapDirection = function(isInsideOutMap) {
 };
 
 /**
- * more checks: Circle can adjust to a new intersection
- * means it can change and has less than 3 intersections
- * @method Circle#canAdjust
- * @return boolean, true if circle can adjust
- */
-Circle.prototype.canAdjust = function() {
-    return (this.canChange) && (this.intersections.length < 3);
-};
-
-/**
  * add an intersection
  * we can have more than 3, but then this circle cannot adjust to intersections
  * @method Circle#addIntersection
@@ -714,6 +721,7 @@ Circle.prototype.addIntersection = function(intersection) {
     }
     this.intersections.push(intersection);
     this.activateUI();
+     //   console.log('add',this.id,this.intersections.length);
 };
 
 /**
@@ -733,6 +741,7 @@ Circle.prototype.removeIntersection = function(intersection) {
         console.log(intersection);
         console.log(this);
     }
+  //  console.log('remove',this.id,this.intersections.length);
 };
 
 /**
@@ -745,11 +754,11 @@ Circle.prototype.draw = function(highlight = 0) {
     const context = output.canvasContext;
     switch (highlight) {
         case 0:
-            output.setLineWidth(Circle.lineWidth);
+            output.setLineWidth(map.linewidth);
             context.strokeStyle = this.color;
             break;
         case 1:
-            output.setLineWidth(Circle.highlightLineWidth);
+            output.setLineWidth(3 * map.linewidth);
             if ((this.intersections.length < 3) && (this.canChange)) {
                 context.strokeStyle = Circle.highlightColor;
             } else {
@@ -757,7 +766,7 @@ Circle.prototype.draw = function(highlight = 0) {
             }
             break;
         case 2:
-            output.setLineWidth(Circle.highlightLineWidth);
+            output.setLineWidth(3 * map.linewidth);
             if ((this.intersections.length < 3) && (this.canChange)) {
                 context.strokeStyle = Circle.otherHighlightColor;
             } else {
@@ -778,7 +787,7 @@ Circle.prototype.draw = function(highlight = 0) {
  */
 Circle.prototype.isSelected = function(position) {
     const r = Math.hypot(position.x - this.centerX, position.y - this.centerY);
-    const effSelectWidth = Circle.selectWidth * output.coordinateTransform.totalScale;
+    const effSelectWidth = 3 * map.linewidth * output.coordinateTransform.totalScale;
     return Math.abs(r - this.radius) < effSelectWidth;
 };
 
@@ -818,7 +827,7 @@ Circle.prototype.map = function(position) {
             if (dr2 > this.radius2) {
                 return false;
             } else {
-                const factor = this.radius2 / Math.max(dr2, epsilon2);
+                const factor = this.radius2 / (dr2 + epsilon2);
                 position.x = this.centerX + factor * dx;
                 position.y = this.centerY + factor * dy;
                 return true;
@@ -839,6 +848,52 @@ Circle.prototype.map = function(position) {
 };
 
 /**
+ * make the mapping and draw trajectory, return true if mapping occured
+ * @method Circle.drawTrajectory
+ * @param {object} position - with x and y fields, will be changed
+ * @return boolean, true if mapping occured (point was outside target and is inside now)
+ */
+Circle.prototype.drawTrajectory = function(position) {
+    if (this.isMapping) {
+        const context = output.canvasContext;
+        output.setLineWidth(map.linewidth);
+        context.strokeStyle = this.color;
+        const dx = position.x - this.centerX;
+        const dy = position.y - this.centerY;
+        const dr2 = dx * dx + dy * dy;
+        if (this.isInsideOutMap) {
+            if (dr2 > this.radius2) {
+                return false;
+            } else {
+                context.beginPath();
+                context.moveTo(position.x, position.y);
+                const factor = this.radius2 / (dr2 + epsilon2);
+                position.x = this.centerX + factor * dx;
+                position.y = this.centerY + factor * dy;
+                context.lineTo(position.x, position.y);
+                context.stroke();
+                return true;
+            }
+        } else {
+            if (dr2 < this.radius2) {
+                return false;
+            } else {
+                context.beginPath();
+                context.moveTo(position.x, position.y);
+                const factor = this.radius2 / dr2;
+                position.x = this.centerX + factor * dx;
+                position.y = this.centerY + factor * dy;
+                context.lineTo(position.x, position.y);
+                context.stroke();
+                return true;
+            }
+        }
+    } else {
+        return false;
+    }
+};
+
+/**
  * invert at the circle, used to get always a good image
  * @method Circle.invert
  * @param {object} position - with x and y fields, will be changed
@@ -847,7 +902,7 @@ Circle.prototype.invert = function(position) {
     const dx = position.x - this.centerX;
     const dy = position.y - this.centerY;
     const dr2 = dx * dx + dy * dy;
-    const factor = this.radius2 / Math.max(dr2, epsilon2);
+    const factor = this.radius2 / (dr2 + epsilon2);
     position.x = this.centerX + factor * dx;
     position.y = this.centerY + factor * dy;
 };

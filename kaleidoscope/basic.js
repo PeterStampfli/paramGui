@@ -3,13 +3,16 @@
 import {
     map,
     output,
-    ParamGui
+    ParamGui,
+    Pixels,
+    ColorInput
 } from "../libgui/modules.js";
 
 import {
     circles,
     intersections,
-    presets
+    presets,
+    regions
 } from './modules.js';
 
 /**
@@ -18,6 +21,9 @@ import {
  */
 export const basic = {};
 
+// for debug drawing/messages
+basic.debug = false;
+
 /**
  * setting up the output, gui and drawing
  * @method basic.setup
@@ -25,37 +31,91 @@ export const basic = {};
 basic.setup = function() {
     // base gui
     const gui = new ParamGui({
-        name: 'test',
+        name: 'kaleidoscopeBuilder',
         closed: false
     });
     basic.gui = gui;
     // create an output canvas
     const outputGui = gui.addFolder('output image');
     output.createCanvas(outputGui);
-    output.canvas.style.backgroundColor = 'grey';
     output.createPixels();
+    output.grid.interval = 0.1;
+    output.addGrid(outputGui);
     // coordinate transform for the output image
-    outputGui.addParagraph('coordinate transform');
+    outputGui.addParagraph('<strong>coordinate transform:</strong>');
     output.addCoordinateTransform(outputGui, false);
     output.setInitialCoordinates(0, 0, 3);
+
     // setting up the mapping, and its default input image
     map.mapping = function(point) {
         circles.map(point);
     };
-    map.setOutputDraw(); // links the ouput drawing routines
-    const inputGui = gui.addFolder('input image');
+    map.setOutputDraw(); // links the output drawing routines
     map.inputImage = '../libgui/testimage.jpg';
-    map.setupInputImage(inputGui);
-    // setting up the regions
-    // only the beginning ?
-    // something is not ok !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    const regionGui = gui.addFolder('regions');
-    map.regionControl(regionGui, 2);
-    map.makeNewColorTable(regionGui, 2);
+    map.makeShowingGui(gui);
+    map.trajectoryColorController.destroy();
+
+    // a new map means changed circles
+    // we have to work out the regions
+    /**
+     * what to do when the map changes (parameters, canvas size too)
+     * circles might change - we have to determine the regions
+     * @method map.drawMapChanged
+     */
+    map.drawMapChanged = function() {
+        map.clearActive();
+        map.startDrawing();
+        if (map.updatingTheMap) {
+            // determine fundamental regions
+            regions.collectCircles();
+            regions.determineBoundingRectangle();
+            regions.linesFromInsideOutMappingCircles();
+            regions.linesFromOutsideInMappingCircles();
+            regions.removeDeadEnds();
+            regions.makePolygons();
+            circles.lastCircleIndexArray = new Uint8Array(map.xArray.length);
+            map.make();
+            map.renumber();
+        }
+        // now we know which regions are relevant
+        // make their controllers visible
+        map.showControls();
+        // create colors for structure (regions)
+        map.makeStructureColors();
+        // draw image, taking into account regions, and new options
+        map.drawImageChanged();
+    };
+
+    /**
+     * what to do when only the image changes
+     * @method map.drawImageChanged
+     */
+    map.drawImageChanged = function() {
+        map.draw();
+        output.drawGrid();
+        circles.draw();
+        intersections.draw();
+        if (regions.debug && map.updatingTheMap) {
+            regions.drawBoundingRectangle();
+            regions.drawCorners();
+            regions.drawLines();
+        }
+    };
+
     // the presets: make gui and load
     presets.makeGui(gui, {
         closed: false
     });
+    map.addDrawFundamentalRegion();
+    map.addDrawNoImage();
+    map.addDrawIterations();
+    map.addDrawLimitset();
+    map.addDrawIndrasPearls();
+    // new version for regions
+    map.makeRegionsGui(gui, {
+        closed: false
+    });
+
     // GUI's for circles and intersections: you can close them afterwards
     circles.makeGui(gui, {
         closed: false
@@ -63,11 +123,7 @@ basic.setup = function() {
     intersections.makeGui(gui, {
         closed: false
     });
-    map.drawImageChanged = function() {
-        map.draw();
-        circles.draw();
-        intersections.draw();
-    };
+
     // mouse controls
     // mouse move with ctrl shows objects that can be selected
     output.mouseCtrlMoveAction = function(event) {
@@ -78,26 +134,32 @@ basic.setup = function() {
         } else {
             output.canvas.style.cursor = "default";
         }
-        output.pixels.show();
-        circles.draw();
-        intersections.draw();
+        basic.drawCirclesIntersections();
+        if (map.trajectory) {
+            circles.drawTrajectory(event);
+        }
     };
     // smooth transition when ctrl key is pressed
     output.ctrlKeyDownAction = function(event) {
         output.mouseCtrlMoveAction(event);
     };
+
     // mouse down with ctrl selects intersection or circle
     output.mouseCtrlDownAction = function(event) {
         if (intersections.select(event) || circles.select(event)) {
-            output.pixels.show();
-            circles.draw();
-            intersections.draw();
+            basic.drawCirclesIntersections();
+            if (map.trajectory) {
+                circles.drawTrajectory(event);
+            }
         }
     };
     // mouse drag with ctrl moves selected circle
     output.mouseCtrlDragAction = function(event) {
         circles.dragAction(event);
-        map.drawMapChanged();
+        basic.drawMapChanged();
+        if (map.trajectory) {
+            circles.drawTrajectory(event);
+        }
     };
 
     // mouse wheel with ctrl changes radius of slected circle
@@ -109,6 +171,9 @@ basic.setup = function() {
             circles.wheelAction(event);
         }
         map.drawMapChanged();
+        if (map.trajectory) {
+            circles.drawTrajectory(event);
+        }
     };
 };
 
@@ -121,7 +186,7 @@ basic.setup = function() {
  * @method basic.drawMapChanged
  */
 basic.drawMapChanged = function() {
-	    circles.finalInversion=circles.allInsideOut();
+    circles.finalInversion = circles.allInsideOut();
     map.drawMapChanged();
 };
 
@@ -141,9 +206,73 @@ basic.drawImageChanged = function() {
  */
 basic.drawCirclesIntersections = function() {
     output.pixels.show(); // no new map
+    output.drawGrid();
     circles.draw();
     intersections.draw();
+    if (regions.debug && map.updatingTheMap) {
+        regions.drawBoundingRectangle();
+        regions.drawCorners();
+        regions.drawLines();
+    }
 };
+
+// for drawing the fundamental region
+map.isInFundamentalRegion = function(point) {
+    return circles.isInTarget(point);
+};
+
+// Indra's pearls
+
+map.callDrawIndrasPearls = function() {
+    map.drawingImage = false;
+    map.inputImageControllersHide();
+    map.thresholdGammaControllersHide();
+    map.lightDarkControllersHide();
+    map.drawIndrasPearls();
+};
+
+/**
+ * draw Indra's pearls (pixel gets color of last mapping circle)
+ * @method map.drawIndrasPearls
+ */
+map.drawIndrasPearls = function() {
+    if (map.inputImageLoaded) {
+        map.controlPixels.setAlpha(map.controlPixelsAlpha);
+        map.controlPixels.show();
+    }
+    // make table of colors related to circles.collection
+    const colors = [];
+    const colorObj = {
+        alpha: 255
+    };
+    colors.length = circles.collection.length;
+    for (var i = 0; i < circles.collection.length; i++) {
+        ColorInput.setObject(colorObj, circles.collection[i].color);
+        colors[i] = Pixels.integerOfColor(colorObj);
+    }
+    const length = map.width * map.height;
+    for (var index = 0; index < length; index++) {
+        // target region, where the pixel has been mapped into
+        const lastCircleIndex = circles.lastCircleIndexArray[index];
+        if (lastCircleIndex < 255) {
+            output.pixels.array[index] = colors[lastCircleIndex];
+        } else {
+            output.pixels.array[index] = 0; // transparent black
+        }
+    }
+    output.pixels.show();
+};
+
+/**
+ * add the possibility to draw Indra's pearls
+ * @method map.addDrawIndrasPearls
+ */
+map.addDrawIndrasPearls = function() {
+    map.whatToShowController.addOption("Indra's Pearls", map.callDrawIndrasPearls);
+};
+
+// presets
+//============================================================
 
 /**
  * get properties of the kaleidoscope (saving as preset)
@@ -174,7 +303,7 @@ basic.getJSON = function() {
  * @return String, defines the kaleidoscope
  */
 basic.getProperties = function() {
-    return basic.getJSON().replace(/"/g,"");
+    return basic.getJSON().replace(/"/g, "");
 };
 
 /**

@@ -10,7 +10,8 @@ import {
 import {
     Circle,
     intersections,
-    basic
+    basic,
+    regions
 } from './modules.js';
 
 /**
@@ -32,7 +33,7 @@ circles.otherSelected = false;
 // because we may delete elements of the collection array
 // we need id numbers to reconstruct intersections between circles (presets, saving the structure)
 
-let id = -1;
+let lastId = -1;
 
 /**
  * get an id number
@@ -40,12 +41,12 @@ let id = -1;
  * @return integer id
  */
 circles.getId = function() {
-    id += 1;
-    return id;
+    lastId += 1;
+    return lastId;
 };
 
 let colorIndex = -1;
-const colors = ['#ff0000', '#00ff00', '#ff00ff', '#0000ff', '#000000'];
+const colors = ['#ee0000', '#0000ff', '#00dd00', '#aa9900', '#000000'];
 
 /**
  * get a color
@@ -71,6 +72,8 @@ circles.getColor = function() {
 circles.add = function(properties = {}) {
     if (!guiUtils.isNumber(properties.id)) {
         properties.id = circles.getId();
+    } else {
+        lastId = Math.max(lastId, properties.id); // for having unique ids when using presets
     }
     if (!guiUtils.isString(properties.color)) {
         properties.color = circles.getColor();
@@ -98,6 +101,9 @@ circles.remove = function(circle) {
     if (circles.selected === circle) {
         circles.selected = circles.otherSelected;
         circles.otherSelected = false;
+        if (!guiUtils.isObject(circles.selected) && (circles.collection.length >= 1)) {
+            circles.selected = circles.collection[circles.collection.length - 1];
+        }
     }
     if (circles.otherSelected === circle) {
         circles.otherSelected = false;
@@ -200,9 +206,7 @@ circles.makeGui = function(parentGui, args = {}) {
         labelText: '',
         buttonText: ['visible', 'hidden'],
         onChange: function() {
-            output.pixels.show(); // no new map
-            circles.draw();
-            intersections.draw();
+            basic.drawCirclesIntersections();
         }
     });
     circles.gui.add({
@@ -223,11 +227,21 @@ circles.makeGui = function(parentGui, args = {}) {
             }
         }
     });
+    circles.gui.add({
+        type: 'button',
+        buttonText: 'select nothing',
+        onClick: function() {
+            circles.selected = false;
+            circles.otherSelected = false;
+            intersections.selected = false;
+            basic.drawCirclesIntersections();
+        }
+    });
     circles.activateUI();
 };
 
 /**
- * activate the UI (the dlete button depending whether there is a circle left over)
+ * activate the UI (the delete button depending whether there is a circle left over)
  * and update message for selected circles
  * @method circles.activateUI
  */
@@ -332,8 +346,9 @@ circles.dragAction = function(event) {
 // mapping
 //==================================
 
-// max number of iterations
-const maxIterations = 20;
+// for Indra's pearls: id of the last mapping circle
+// id===255 means: no circle
+circles.lastCircleIndexArray = new Uint8Array(1);
 
 /**
  * check if all mapping circles are mapping inside out
@@ -363,35 +378,71 @@ circles.allInsideOut = function() {
  * @param {object} point - with x,y,structureIndex and valid fields
  */
 circles.map = function(point) {
+    let lastCircleIndex = 255;
     const collectionLength = circles.collection.length;
-    for (var i = 0; i < maxIterations; i++) {
+    while (point.iterations <= map.maxIterations) {
         let mapped = false;
-        for (var j = 0; j < collectionLength; j++) {
+        let j = 0;
+        while ((j < collectionLength) && (point.iterations <= map.maxIterations)) {
             if (circles.collection[j].map(point)) {
                 mapped = true;
-                point.structureIndex += 1;
+                point.iterations += 1;
+                lastCircleIndex = j;
             }
+            j += 1;
         }
         if (!mapped) {
-            // inversion needed if all circles map inside out
+            // mapping is a success, we know where the point ends up
+            // determine if it is in a polygon
+            let region = regions.getPolygonIndex(point);
+            if (region < 0) {
+                // not in a polygon, then it is in the outside region, it is always the last region
+                region = regions.polygons.length;
+            }
+            point.region = region;
+            map.activeRegions[region] = true;
+            // inversion needed to get a good mapping of input image if all circles map inside out
             if (circles.finalInversion) {
                 circles.collection[0].invert(point);
             }
+            circles.lastCircleIndexArray[point.index] = lastCircleIndex;
             return;
         }
     }
+    circles.lastCircleIndexArray[point.index] = lastCircleIndex;
+    point.region = 255; // to be safe??
     point.valid = -1; // invalid position/pixel
 };
 
-// determine target regions of the mapping
-//===========================================
 
-// for each pixel
-// number of the target region its mapping goees to
-// region 0 contains infinity
-// region 255 is not a target
-// region 254 is unspecified target
-circles.targetRegions = new Uint8Array(1);
+/**
+ * mapping and drawing the trajetory, using the circles, 
+ * repeat until no more mapping or maximum number of iterations reached
+ * @method circles.drawTrajectory
+ * @param {object} point - with x,y,structureIndex and valid fields
+ */
+circles.drawTrajectory = function(point) {
+    const context = output.canvasContext;
+    output.setLineWidth(map.linewidth);
+    context.strokeStyle = 'black';
+    context.beginPath();
+    context.arc(point.x, point.y, 2.5 * map.linewidth * output.coordinateTransform.totalScale, 0, 2 * Math.PI);
+    context.stroke();
+    const collectionLength = circles.collection.length;
+    let mapped = true;
+    let iterations = 0;
+    while (mapped && (iterations <= map.maxIterations)) {
+        mapped = false;
+        let j = 0;
+        while ((j < collectionLength) && (iterations <= map.maxIterations)) {
+            if (circles.collection[j].drawTrajectory(point)) {
+                mapped = true;
+                iterations += 1;
+            }
+            j += 1;
+        }
+    }
+};
 
 /**
  * determine of a point is inside any target region of combined mapping

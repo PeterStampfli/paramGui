@@ -160,7 +160,8 @@ regions.cornersLeft = [];
 regions.cornersRight = [];
 
 /**
- * doing the intersection between an insideout and an outsidein circle
+ * doing the intersection between an inside->out and an outside->in circle
+ * creates the corresponding line
  * @method regions.insideOutIntersectsOutsideIn
  * @param {Corner} inOutCorner - we need the corner object of the inside out mapping circlee for making lines
  * @param {Circle} outInCircle - outside-in mapping
@@ -261,7 +262,7 @@ regions.insideOutIntersectsOutsideIn = function(inOutCorner, outInCircle) {
 };
 
 // making lines from boundary pieces
-// based on sorted arrays of corners
+// based on sorted arrays of corners, connecting corners in sequence
 function makeLines(corners) {
     const length = corners.length;
     for (var i = 0; i < length - 1; i++) {
@@ -272,6 +273,7 @@ function makeLines(corners) {
 
 /**
  * lines due to outside->in mapping circles
+ * makes a bounding rectangle and lines going from inside->out mapping cirles to the bounding rectangle
  * @method regions.linesFromOutsideInMappingCircles
  */
 regions.linesFromOutsideInMappingCircles = function() {
@@ -337,6 +339,55 @@ regions.removeLine = function(line) {
         console.error('regions.removeLine: line not found. It is:');
         console.log(line);
         console.log(regions.lines);
+    }
+};
+
+/**
+ * intersecting lines/nonplanar graph:
+ * intersection as new corner, cut lines in pieces
+ * @method regions.resolveIntersections
+ */
+regions.resolveIntersections = function() {
+    let foundIntersection = true;
+    // repeat until no intersection found
+    // with loop breaker just in case (avoid hanging up)
+    const maxIterations = 20;
+    let iterations = 0;
+    while (foundIntersection && (iterations <= maxIterations)) {
+        iterations += 1;
+        foundIntersection = false;
+        let i = 0;
+        // note that lines.length may change
+        // finding an intersection and changing lines disorders everything
+        // and we have to begin search from start (?)
+        // this is safe but not fast, as speed is not really important here
+        while ((i < regions.lines.length) && !foundIntersection) {
+            const lineI = regions.lines[i];
+            let j = i + 1;
+            while ((j < regions.lines.length) && !foundIntersection) {
+                const lineJ = regions.lines[j];
+                const intersection = lineI.findIntersection(lineJ);
+                if (guiUtils.isObject(intersection)) {
+                    regions.corners.push(intersection);
+                    // this is tricky, the intersection might lie at the end of a line
+                    // cut lines only if intersection is far from endpoints of the line
+                    if (!lineI.corner1.isEqual(intersection) && !lineI.corner2.isEqual(intersection)) {
+                        foundIntersection = true;
+                        regions.lines.push(new Line(lineI.corner1, intersection));
+                        regions.lines.push(new Line(lineI.corner2, intersection));
+                        regions.removeLine(lineI); // removes line from corners' list of lines too, we can't simply change endpoints
+                    }
+                    if (!lineJ.corner1.isEqual(intersection) && !lineJ.corner2.isEqual(intersection)) {
+                        foundIntersection = true;
+                        regions.lines.push(new Line(lineJ.corner1, intersection));
+                        regions.lines.push(new Line(lineJ.corner2, intersection));
+                        regions.removeLine(lineJ);
+                    }
+                }
+                j += 1;
+            }
+            i += 1;
+        }
     }
 };
 

@@ -11,7 +11,8 @@ from "../libgui/modules.js";
 import {
     circles,
     intersections,
-    basic
+    basic,
+    Fast
 } from './modules.js';
 
 // beware of hitting the circle center
@@ -22,9 +23,9 @@ const epsilon2 = epsilon * epsilon;
 Circle.zoomFactor = 1.04;
 
 // parameters for drawing, change if you do not like it 
-Circle.highlightColor = 'yellow';
-Circle.otherHighlightColor = 'white';
-Circle.frozenHighlightColor = '#ffbbbb';
+Circle.highlightColor = '#ffff00';
+Circle.otherHighlightColor = '#ffffff';
+Circle.frozenHighlightColor = '#eeee88';
 
 /**
  * a circle as a building block for kaleidoscopes
@@ -39,14 +40,14 @@ export function Circle(parentGui, properties) {
     this.radius = 1;
     this.centerX = 0;
     this.centerY = 0;
-    this.isInsideOutMap = true; // map direction, inside-out is more useful, not all circles overlap
-    this.isMapping = true; // switch mapping on or off (debugging and building), the intersections remain
+    this.mapType = 'inside -> out';
     this.color = '#000000'; // color for drawing a circle
     this.id = 0;
     // overwrite defaults with fields of the parameter object                                        // unique id, if circles are deleted the id is not related to index in circles.collection
     if (guiUtils.isObject(properties)) {
         Object.assign(this, properties);
     }
+    this.setMapProperties(this.mapType);
     // for speeding up the mapping
     this.radius2 = this.radius * this.radius;
     // the collection of the circle's intersections
@@ -57,34 +58,23 @@ export function Circle(parentGui, properties) {
     // controllers try to change parameters
     // if it does not work because of intersections, we still have the old values
     const circle = this;
-    this.gui = parentGui.addFolder('Circle ' + this.id);
+    this.gui = parentGui;
 
     BooleanButton.greenRedBackground();
     this.canChangeController = this.gui.add({
         type: 'boolean',
         params: this,
         property: 'canChange',
-        labelText: 'parameters',
+        labelText: '<strong>circle ' + this.id + '</strong>',
         width: 100,
         buttonText: ['can change', 'frozen'],
         onChange: function() {
             circle.activateUI();
             intersections.activateUI();
-            circle.mapDirectionController.setActive(circle.canChange);
             basic.drawCirclesIntersections(); // no new map
         }
     });
 
-    this.radiusController = this.gui.add({
-        type: 'number',
-        initialValue: this.radius,
-        labelText: 'radius',
-        min: 0,
-        onChange: function(radius) {
-            circles.setSelected(circle);
-            circle.tryRadius(radius);
-        }
-    });
     this.centerXController = this.gui.add({
         type: 'number',
         labelText: 'center: x',
@@ -103,29 +93,52 @@ export function Circle(parentGui, properties) {
             circle.tryPosition(circle.centerX, centerY);
         }
     });
-    BooleanButton.whiteBackground();
-    this.mapDirectionController = this.gui.add({
-        type: 'boolean',
+
+    this.radiusController = this.centerYController.add({
+        type: 'number',
+        initialValue: this.radius,
+        labelText: 'radius',
+        min: 0,
+        onChange: function(radius) {
+            circles.setSelected(circle);
+            circle.tryRadius(radius);
+        }
+    });
+
+    this.mapTypeController = this.gui.add({
+        type: 'selection',
+        params: this,
+        property: 'mapType',
         labelText: 'map',
         width: 100,
-        buttonText: ['inside -> out', 'outside -> in'],
-        initialValue: this.isInsideOutMap,
-        onChange: function(isInsideOutMap) {
+        options: ['inside -> out', 'outside -> in', 'no mapping', 'inverting view', 'logarithmic view', 'ortho-stereographic view'],
+        onChange: function(mapType) {
+            console.log('map type selected', mapType);
             circles.setSelected(circle);
-            circle.tryMapDirection(isInsideOutMap);
+            // if map direction changes, try new direction
+            if ((mapType === 'inside -> out') && !circle.isInsideOutMap) {
+                circle.isInsideOutMap = true; // we want inside->out map
+                // check if successful
+                const success = circle.adjustToIntersections();
+                if (!success) {
+                    // failing to change direction, change selection
+                    circle.mapTypeController.setValueOnly('outside -> in');
+                }
+            } else if ((mapType === 'outside -> in') && circle.isInsideOutMap) {
+                circle.isInsideOutMap = false; // we want outside->in map
+                // check if successful
+                const success = circle.adjustToIntersections();
+                if (!success) {
+                    // failing to change direction, change selection
+                    circle.mapTypeController.setValueOnly('inside -> out');
+                }
+            }
+            // set properties of map, may have changed
+            circle.setMapProperties(circle.mapTypeController.getValue());
+            basic.drawMapChanged();
         }
     });
-    BooleanButton.greenRedBackground();
-    this.mapOnOffController = this.mapDirectionController.add({
-        type: 'boolean',
-        params: this,
-        property: 'isMapping',
-        labelText: '',
-        onChange: function() {
-            circles.setSelected(circle);
-            basic.drawMapChanged(); // changes map
-        }
-    });
+
     this.colorController = this.gui.add({
         type: 'color',
         params: this,
@@ -142,6 +155,55 @@ export function Circle(parentGui, properties) {
 }
 
 /**
+ * set mapping properties from mapType
+ * note the redundancy of data, difficult to improve, thus modify only using this method
+ * @method Circle#setMapProperties
+ * @param {String} mapType
+ */
+Circle.prototype.setMapProperties = function(mapType) {
+    switch (mapType) {
+        case 'inside -> out':
+            this.isInsideOutMap = true; // map direction, inside-out is more useful, not all circles overlap
+            this.isMapping = true; // switch mapping on or off (debugging and building), the intersections remain
+            this.isView = false; // true for circles that change the view, such as inversion
+            this.map = this.insideOutMap; // improving speed
+            this.isInTarget = this.isOutside;
+            break;
+        case 'outside -> in':
+            this.isInsideOutMap = false;
+            this.isMapping = true;
+            this.isView = false;
+            this.map = this.outsideInMap;
+            this.isInTarget = this.isInside;
+            break;
+        case 'no mapping':
+            this.isMapping = false;
+            this.isView = false;
+            this.map = this.noMap;
+            this.isInTarget = this.noMap;
+            break;
+        case 'inverting view':
+            this.isMapping = false;
+            this.isView = true;
+            this.map = this.invert;
+            this.isInTarget = this.noMap;
+            break;
+        case 'logarithmic view':
+            this.isMapping = false;
+            this.isView = true;
+            this.map = this.exponential;
+            this.isInTarget = this.noMap;
+            break;
+        case 'ortho-stereographic view':
+            this.isMapping = false;
+            this.isView = true;
+            this.map = this.orthoStereo;
+            this.isInTarget = this.noMap;
+            break;
+    }
+};
+
+/**
  * get properties of this circle as an object
  * @method Circle#getProperties
  * @return object, with all properties needed to build the same circle
@@ -152,8 +214,7 @@ Circle.prototype.getProperties = function() {
         centerX: this.centerX,
         centerY: this.centerY,
         canChange: this.canChange,
-        isInsideOutMap: this.isInsideOutMap,
-        isMapping: this.isMapping,
+        mapType: this.mapType,
         color: this.color,
         id: this.id
     };
@@ -169,7 +230,6 @@ Circle.prototype.updateUI = function() {
     this.centerXController.setValueOnly(this.centerX);
     this.centerYController.setValueOnly(this.centerY);
     this.radiusController.setValueOnly(this.radius);
-    this.mapDirectionController.setValueOnly(this.isInsideOutMap);
 };
 
 /**
@@ -194,17 +254,25 @@ Circle.prototype.activateUI = function() {
  * for checking if we can have an intersection:
  * do the circles really intersect ?
  * using the triangle rule "for all three sides"
+ * nearly concentric circles with nearly same radius do not intersect
  * @method Circle#intersectsCircle
  * @param {Circle} circle
  * @return boolean, true if the circles intersect
  */
+const eps = 0.001;
 Circle.prototype.intersectsCircle = function(circle) {
     const distance = Math.hypot(this.centerX - circle.centerX, this.centerY - circle.centerY);
-    const safetyFactor = 0.999; // float numbers are never accurate
-    let intersects = ((this.radius + circle.radius) >= distance * safetyFactor);
-    intersects = intersects && ((this.radius + distance) >= circle.radius * safetyFactor);
-    intersects = intersects && ((circle.radius + distance) >= this.radius * safetyFactor);
-    return intersects;
+    // Note: Concentric circles of same radius do not intersect
+    if (distance < eps * (this.radius + circle.radius)) {
+        return false;
+    } else {
+        // float numbers are never accurate, make sure that touching circles intersect
+        const safetyFactor = 0.999;
+        let intersects = ((this.radius + circle.radius) >= distance * safetyFactor);
+        intersects = intersects && ((this.radius + distance) >= circle.radius * safetyFactor);
+        intersects = intersects && ((circle.radius + distance) >= this.radius * safetyFactor);
+        return intersects;
+    }
 };
 
 /**
@@ -683,27 +751,6 @@ Circle.prototype.adjustToIntersections = function() {
 };
 
 /**
- * try a given map direction, adjust circle radius and position to intersections
- * if fails do not change current position
- * if success update UI to new values and draw image
- * @method tryMapDirection
- * @param {boolean} isInsideOutMap
- */
-Circle.prototype.tryMapDirection = function(isInsideOutMap) {
-    // remember the old parameter (maybe it did not change?)
-    const currentIsInsideOutMap = this.isInsideOutMap;
-    this.isInsideOutMap = isInsideOutMap;
-    let success = this.adjustToIntersections();
-    if (success) {
-        this.updateUI();
-        basic.drawMapChanged();
-    } else {
-        this.isInsideOutMap = currentIsInsideOutMap; // fail: restore value
-        this.updateUI(); // reset the shown map direction value
-    }
-};
-
-/**
  * add an intersection
  * we can have more than 3, but then this circle cannot adjust to intersections
  * @method Circle#addIntersection
@@ -721,7 +768,7 @@ Circle.prototype.addIntersection = function(intersection) {
     }
     this.intersections.push(intersection);
     this.activateUI();
-     //   console.log('add',this.id,this.intersections.length);
+    //   console.log('add',this.id,this.intersections.length);
 };
 
 /**
@@ -741,12 +788,12 @@ Circle.prototype.removeIntersection = function(intersection) {
         console.log(intersection);
         console.log(this);
     }
-  //  console.log('remove',this.id,this.intersections.length);
 };
 
 /**
  * drawing a circle
  * as a broader circle in a highlight color or narrow in its own color
+ * inverting view with cross mark at center for mor precise positioning
  * @method Circle#draw
  * @param {boolean} highlight - optional, default is 0, not highlighted
  */
@@ -754,10 +801,27 @@ Circle.prototype.draw = function(highlight = 0) {
     const context = output.canvasContext;
     switch (highlight) {
         case 0:
+            // basic drawing without highlight
             output.setLineWidth(map.linewidth);
             context.strokeStyle = this.color;
+            if (this.mapType === 'inverting view') {
+
+                const d = 2 * map.linewidth * output.coordinateTransform.totalScale;
+                const D = 10 * map.linewidth * output.coordinateTransform.totalScale;
+                context.beginPath();
+                context.moveTo(this.centerX - D, this.centerY);
+                context.lineTo(this.centerX - d, this.centerY);
+                context.moveTo(this.centerX + D, this.centerY);
+                context.lineTo(this.centerX + d, this.centerY);
+                context.moveTo(this.centerX, this.centerY - D);
+                context.lineTo(this.centerX, this.centerY - d);
+                context.moveTo(this.centerX, this.centerY + D);
+                context.lineTo(this.centerX, this.centerY + d);
+                context.stroke();
+            }
             break;
         case 1:
+            // highlighting the last selection
             output.setLineWidth(3 * map.linewidth);
             if ((this.intersections.length < 3) && (this.canChange)) {
                 context.strokeStyle = Circle.highlightColor;
@@ -766,6 +830,7 @@ Circle.prototype.draw = function(highlight = 0) {
             }
             break;
         case 2:
+            // highlighting the other selection
             output.setLineWidth(3 * map.linewidth);
             if ((this.intersections.length < 3) && (this.canChange)) {
                 context.strokeStyle = Circle.otherHighlightColor;
@@ -793,109 +858,123 @@ Circle.prototype.isSelected = function(position) {
 
 /**
  * check if the position is inside the target region of the circle map (inside or outside the circle)
- * NOTE: Avoid double negations, use positive form of function
  * @method Circle#isInTarget
  * @param {object} position - with x and y fields, such as mouseEvents
  * @return boolean, true if in target region (inside for outsideIn)
  */
 Circle.prototype.isInTarget = function(position) {
+    return false;
+};
+
+/**
+ * check if the position is inside the circle (target region for outside->in mapping circles)
+ * @method Circle#isInside
+ * @param {object} position - with x and y fields, such as mouseEvents
+ * @return boolean, true if in target region (inside for outsideIn)
+ */
+Circle.prototype.isInside = function(position) {
     const dx = position.x - this.centerX;
     const dy = position.y - this.centerY;
-    if (this.isMapping) {
-        if (this.isInsideOutMap) {
-            return dx * dx + dy * dy > this.radius2;
-        } else {
-            return dx * dx + dy * dy < this.radius2;
-        }
-    } else {
-        return true;
-    }
+    return dx * dx + dy * dy < this.radius2;
+};
+
+/**
+ * check if the position is inside the circle (target region for inside->out mapping circles)
+ * @method Circle#isOutside
+ * @param {object} position - with x and y fields, such as mouseEvents
+ * @return boolean, true if in target region (inside for outsideIn)
+ */
+Circle.prototype.isOutside = function(position) {
+    const dx = position.x - this.centerX;
+    const dy = position.y - this.centerY;
+    return dx * dx + dy * dy > this.radius2;
 };
 
 /**
  * make the mapping, return true if mapping occured
- * @method Circle.map
+ * @method Circle#map
  * @param {object} position - with x and y fields, will be changed
  * @return boolean, true if mapping occured (point was outside target and is inside now)
  */
 Circle.prototype.map = function(position) {
-    if (this.isMapping) {
-        const dx = position.x - this.centerX;
-        const dy = position.y - this.centerY;
-        const dr2 = dx * dx + dy * dy;
-        if (this.isInsideOutMap) {
-            if (dr2 > this.radius2) {
-                return false;
-            } else {
-                const factor = this.radius2 / (dr2 + epsilon2);
-                position.x = this.centerX + factor * dx;
-                position.y = this.centerY + factor * dy;
-                return true;
-            }
-        } else {
-            if (dr2 < this.radius2) {
-                return false;
-            } else {
-                const factor = this.radius2 / dr2;
-                position.x = this.centerX + factor * dx;
-                position.y = this.centerY + factor * dy;
-                return true;
-            }
-        }
-    } else {
-        return false;
-    }
+    return false;
 };
 
 /**
  * make the mapping and draw trajectory, return true if mapping occured
- * @method Circle.drawTrajectory
+ * @method Circle#drawTrajectory
  * @param {object} position - with x and y fields, will be changed
  * @return boolean, true if mapping occured (point was outside target and is inside now)
  */
 Circle.prototype.drawTrajectory = function(position) {
-    if (this.isMapping) {
+    const startX = position.x;
+    const startY = position.y;
+    let mapped = this.map(position);
+    if (mapped) {
         const context = output.canvasContext;
         output.setLineWidth(map.linewidth);
         context.strokeStyle = this.color;
-        const dx = position.x - this.centerX;
-        const dy = position.y - this.centerY;
-        const dr2 = dx * dx + dy * dy;
-        if (this.isInsideOutMap) {
-            if (dr2 > this.radius2) {
-                return false;
-            } else {
-                context.beginPath();
-                context.moveTo(position.x, position.y);
-                const factor = this.radius2 / (dr2 + epsilon2);
-                position.x = this.centerX + factor * dx;
-                position.y = this.centerY + factor * dy;
-                context.lineTo(position.x, position.y);
-                context.stroke();
-                return true;
-            }
-        } else {
-            if (dr2 < this.radius2) {
-                return false;
-            } else {
-                context.beginPath();
-                context.moveTo(position.x, position.y);
-                const factor = this.radius2 / dr2;
-                position.x = this.centerX + factor * dx;
-                position.y = this.centerY + factor * dy;
-                context.lineTo(position.x, position.y);
-                context.stroke();
-                return true;
-            }
-        }
-    } else {
-        return false;
+        context.beginPath();
+        context.moveTo(startX, startY);
+        context.lineTo(position.x, position.y);
+        context.stroke();
     }
+    return mapped;
+};
+
+// special mappings
+
+/**
+ * for a circle that does not map
+ * @method Circle#noMap
+ * @return boolean, false, because there is no mapping
+ */
+Circle.prototype.noMap = function() {
+    return false;
 };
 
 /**
- * invert at the circle, used to get always a good image
- * @method Circle.invert
+ * for a circle that maps inside out, return true if mapping occured
+ * @method Circle#insideOutMap
+ * @param {object} position - with x and y fields, will be changed
+ * @return boolean, true if mapping occured (point was outside target and is inside now)
+ */
+Circle.prototype.insideOutMap = function(position) {
+    const dx = position.x - this.centerX;
+    const dy = position.y - this.centerY;
+    const dr2 = dx * dx + dy * dy;
+    if (dr2 > this.radius2) {
+        return false;
+    }
+    const factor = this.radius2 / (dr2 + epsilon2);
+    position.x = this.centerX + factor * dx;
+    position.y = this.centerY + factor * dy;
+    return true;
+};
+
+/**
+ * for a circle that maps outside in, return true if mapping occured
+ * @method Circle#outsideInMap
+ * @param {object} position - with x and y fields, will be changed
+ * @return boolean, true if mapping occured (point was outside target and is inside now)
+ */
+Circle.prototype.outsideInMap = function(position) {
+    const dx = position.x - this.centerX;
+    const dy = position.y - this.centerY;
+    const dr2 = dx * dx + dy * dy;
+    if (dr2 < this.radius2) {
+        return false;
+    }
+    const factor = this.radius2 / dr2;
+    position.x = this.centerX + factor * dx;
+    position.y = this.centerY + factor * dy;
+    return true;
+};
+
+/**
+ * invert at the circle, used to get a good image even if all circles are mapping inside->out
+ * and for inverted views
+ * @method Circle#invert
  * @param {object} position - with x and y fields, will be changed
  */
 Circle.prototype.invert = function(position) {
@@ -906,6 +985,55 @@ Circle.prototype.invert = function(position) {
     position.x = this.centerX + factor * dx;
     position.y = this.centerY + factor * dy;
 };
+
+/**
+ * complex logarithm at the circle for exponential views
+ * backtransformation gives the inverse
+ * @method Circle#logarithm
+ * @param {object} position - with x and y fields, will be changed
+ */
+Circle.prototype.logarithm = function(position) {
+    const dx = position.x - this.centerX;
+    const dy = position.y - this.centerY;
+    const dr2 = dx * dx + dy * dy + epsilon2;
+    position.x = this.center.x + 0.5 * Fast.log(dr2 / this.radius2);
+    position.y = this.center.y + Fast.atan2(dy, dx);
+};
+
+/**
+ * complex exponent at the circle for logarithmic views
+ * circle center as origin, radius as scale
+ * backtransformation gives the inverse
+ * @method Circle#exponential
+ * @param {object} position - with x and y fields, will be changed
+ */
+Circle.prototype.exponential = function(position) {
+    const dx = position.x - this.centerX;
+    const dy = position.y - this.centerY;
+    Fast.cosSin(dy, position);
+    const r = Fast.exp(dx / this.radius - 1) * this.radius;
+    position.x = this.centerX + r * position.x;
+    position.y = this.centerY + r * position.y;
+};
+
+/**
+ * orthographic view of stereographic projection
+ * circle center as origin, radius as equator of the prejection sphere
+ * projection of the "inside", direct view of the outside
+ * @method Circle#orthoStereo
+ * @param {object} position - with x, y and valid fields, will be changed
+ */
+Circle.prototype.orthoStereo = function(position) {
+    const dx = position.x - this.centerX;
+    const dy = position.y - this.centerY;
+    const d2 = dx * dx + dy * dy;
+    if (d2 < this.radius2) {
+        const factor = 1 / (1 + Math.sqrt(1 - d2 / this.radius2));
+        position.x = this.centerX + factor * dx;
+        position.y = this.centerY + factor * dy;
+    }
+};
+
 /**
  * dragging the circle
  * action depends on intersections
@@ -970,6 +1098,11 @@ Circle.prototype.destroy = function() {
     while (this.intersections.length > 0) {
         this.intersections[this.intersections.length - 1].destroy();
     }
-    this.gui.destroy();
+    this.canChangeController.destroy();
+    this.radiusController.destroy();
+    this.centerYController.destroy();
+    this.centerXController.destroy();
+    this.mapTypeController.destroy();
+    this.colorController.destroy();
     circles.remove(this);
 };

@@ -10,6 +10,7 @@ import {
 
 import {
     circles,
+    Circle,
     intersections,
     presets,
     regions
@@ -45,6 +46,15 @@ basic.setup = function() {
     outputGui.addParagraph('<strong>coordinate transform:</strong>');
     output.addCoordinateTransform(outputGui, false);
     output.setInitialCoordinates(0, 0, 3);
+    // more  UI
+    // the presets: make gui and load
+    presets.makeGui(gui);
+    map.makeShowingGui(gui);
+    // new version for regions
+    map.makeRegionsGui(gui);
+    // GUI's for circles and intersections: you can close them afterwards
+    circles.makeGui(gui);
+    intersections.makeGui(gui);
 
     // setting up the mapping, and its default input image
     map.mapping = function(point) {
@@ -52,7 +62,6 @@ basic.setup = function() {
     };
     map.setOutputDraw(); // links the output drawing routines
     map.inputImage = '../libgui/testimage.jpg';
-    map.makeShowingGui(gui);
     map.trajectoryColorController.destroy();
 
     // a new map means changed circles
@@ -63,7 +72,8 @@ basic.setup = function() {
      * @method map.drawMapChanged
      */
     map.drawMapChanged = function() {
-        map.clearActive();
+        circles.categorize();
+        map.clearActive(); // clears regions
         map.startDrawing();
         if (map.updatingTheMap) {
             // determine fundamental regions
@@ -71,6 +81,7 @@ basic.setup = function() {
             regions.determineBoundingRectangle();
             regions.linesFromInsideOutMappingCircles();
             regions.linesFromOutsideInMappingCircles();
+            regions.resolveIntersections();
             regions.removeDeadEnds();
             regions.makePolygons();
             circles.lastCircleIndexArray = new Uint8Array(map.xArray.length);
@@ -84,6 +95,28 @@ basic.setup = function() {
         map.makeStructureColors();
         // draw image, taking into account regions, and new options
         map.drawImageChanged();
+    };
+
+    // for debug show the polygons when showing fundamental regions
+    map.callDrawFundamentalRegion = function() {
+        map.drawingInputImage = false;
+        map.allImageControllersHide();
+        circles.categorize();
+        map.drawFundamentalRegion();
+        if (regions.debug) {
+            // determine fundamental regions
+            regions.collectCircles();
+            regions.determineBoundingRectangle();
+            regions.linesFromInsideOutMappingCircles();
+            regions.linesFromOutsideInMappingCircles();
+            regions.resolveIntersections();
+            regions.removeDeadEnds();
+            regions.makePolygons();
+            // show the regions
+            regions.drawBoundingRectangle();
+            regions.drawCorners();
+            regions.drawLines();
+        }
     };
 
     /**
@@ -102,27 +135,12 @@ basic.setup = function() {
         }
     };
 
-    // the presets: make gui and load
-    presets.makeGui(gui, {
-        closed: false
-    });
     map.addDrawFundamentalRegion();
     map.addDrawNoImage();
     map.addDrawIterations();
     map.addDrawLimitset();
+    map.addDrawDivergence();
     map.addDrawIndrasPearls();
-    // new version for regions
-    map.makeRegionsGui(gui, {
-        closed: false
-    });
-
-    // GUI's for circles and intersections: you can close them afterwards
-    circles.makeGui(gui, {
-        closed: false
-    });
-    intersections.makeGui(gui, {
-        closed: false
-    });
 
     // mouse controls
     // mouse move with ctrl shows objects that can be selected
@@ -146,13 +164,16 @@ basic.setup = function() {
 
     // mouse down with ctrl selects intersection or circle
     output.mouseCtrlDownAction = function(event) {
-        if (intersections.select(event) || circles.select(event)) {
+        if (intersections.select(event)) {
             basic.drawCirclesIntersections();
-            if (map.trajectory) {
-                circles.drawTrajectory(event);
-            }
+        } else if (circles.select(event)) {
+            basic.drawCirclesIntersections();
+        }
+        if (map.trajectory) {
+            circles.drawTrajectory(event);
         }
     };
+
     // mouse drag with ctrl moves selected circle
     output.mouseCtrlDragAction = function(event) {
         circles.dragAction(event);
@@ -162,7 +183,7 @@ basic.setup = function() {
         }
     };
 
-    // mouse wheel with ctrl changes radius of slected circle
+    // mouse wheel with ctrl changes radius of selected circle
     // with ctrl+shift changes order of selected intersection
     output.mouseCtrlWheelAction = function(event) {
         if (event.shiftPressed) {
@@ -170,6 +191,7 @@ basic.setup = function() {
         } else {
             circles.wheelAction(event);
         }
+
         map.drawMapChanged();
         if (map.trajectory) {
             circles.drawTrajectory(event);
@@ -225,14 +247,13 @@ map.isInFundamentalRegion = function(point) {
 
 map.callDrawIndrasPearls = function() {
     map.drawingImage = false;
-    map.inputImageControllersHide();
-    map.thresholdGammaControllersHide();
-    map.lightDarkControllersHide();
+     map.allImageControllersHide();
     map.drawIndrasPearls();
 };
 
 /**
  * draw Indra's pearls (pixel gets color of last mapping circle)
+ * inverted colors for odd regions
  * @method map.drawIndrasPearls
  */
 map.drawIndrasPearls = function() {
@@ -242,6 +263,7 @@ map.drawIndrasPearls = function() {
     }
     // make table of colors related to circles.collection
     const colors = [];
+    const invertedColors = [];
     const colorObj = {
         alpha: 255
     };
@@ -249,13 +271,18 @@ map.drawIndrasPearls = function() {
     for (var i = 0; i < circles.collection.length; i++) {
         ColorInput.setObject(colorObj, circles.collection[i].color);
         colors[i] = Pixels.integerOfColor(colorObj);
+        colorObj.red = 255 - colorObj.red;
+        colorObj.green = 255 - colorObj.green;
+        colorObj.blue = 255 - colorObj.blue;
+        invertedColors[i] = Pixels.integerOfColor(colorObj);
     }
     const length = map.width * map.height;
     for (var index = 0; index < length; index++) {
         // target region, where the pixel has been mapped into
+        const region = map.regionArray[index];
         const lastCircleIndex = circles.lastCircleIndexArray[index];
-        if (lastCircleIndex < 255) {
-            output.pixels.array[index] = colors[lastCircleIndex];
+        if (map.showRegion[region] && (lastCircleIndex < 255)) {
+                output.pixels.array[index] = colors[lastCircleIndex];
         } else {
             output.pixels.array[index] = 0; // transparent black
         }

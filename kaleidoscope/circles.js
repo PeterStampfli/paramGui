@@ -232,32 +232,64 @@ circles.makeGui = function(parentGui, args = {}) {
             basic.drawCirclesIntersections();
         }
     });
-    circles.gui.add({
+    circles.visibleButton.addHelp('You can hide the circles and intersection symbols to get a neater image.');
+    circles.addCircleButton=circles.gui.add({
         type: 'button',
         buttonText: 'add circle',
         onClick: function() {
-            // add a circle that does not intersect with others
+            var i;
+            // transform data: i => prescale*scale*i+shiftX, j => prescale*scale+shiftY
+            const coordinateTransform = output.coordinateTransform;
+            const prescale = coordinateTransform.prescale;
+            let scale = coordinateTransform.scale;
+            // upper left corner of viewport
+            let shiftX = coordinateTransform.shiftX;
+            let shiftY = coordinateTransform.shiftY;
+            // size of viewport
+            let rangeX = output.canvas.width * prescale * scale;
+            let rangeY = output.canvas.height * prescale * scale;
             const length = circles.collection.length;
+            // add a circle at the left of existing circles, at a reasonable distance
+            // horizontally in the middle of the viewport
             // if there is no circle: add circle near center of image
-            let mini = 1;
-            let maxi = -1;
-            for (var i = 0; i < length; i++) {
+            // beware of circles with very large radius
+            let minX = 2.05;
+            for (i = 0; i < length; i++) {
                 const circle = circles.collection[i];
-                mini = Math.min(mini, circle.centerX - 1.05 * circle.radius);
-                maxi = Math.max(maxi, circle.centerX + 1.05 * circle.radius);
+                minX = Math.min(minX, circle.centerX);
             }
-            if (Math.abs(mini) < Math.abs(maxi)) {
-                circles.add({
-                    centerX: mini - 1.05
-                });
-            } else {
-                circles.add({
-                    centerX: maxi + 1.05
-                });
+            // center of new circle
+            const newCenterX = minX - 2.05;
+            const newCenterY = shiftY + 0.5 * rangeY;
+            circles.add({
+                centerX: newCenterX,
+                centerY: newCenterY
+            });
+            // the new left border position, do not change if additional circle already visible
+            const newShiftX = newCenterX - 0.5;
+            if (shiftX > newShiftX) {
+                // changing the left of the viewport, we might have to adjust the right
+                shiftX = newShiftX;
+                // determine the new minimum range in x-direction, rightmost circle center
+                let maxX = newCenterX;
+                for (i = 0; i < length; i++) {
+                    const circle = circles.collection[i];
+                    maxX = Math.max(maxX, circle.centerX);
+                }
+                const newRangeX = maxX + 0.5 - newShiftX;
+                // only change scale if viewport is too narrow
+                // keep horizontal center in place
+                if (rangeX < newRangeX) {
+                    const newScale = newRangeX / rangeX * scale;
+                    shiftY += 0.5 * rangeY * (1 - newScale / scale); // rangeY has scale as factor
+                    scale = newScale;
+                }
             }
+            coordinateTransform.setValues(shiftX, shiftY, scale);
             basic.drawMapChanged();
         }
     });
+    circles.addCircleButton.addHelp('Adds an additional circle at the left. It is inside->out mapping.');
     circles.deleteButton = circles.gui.add({
         type: 'button',
         buttonText: 'delete selected',
@@ -268,16 +300,20 @@ circles.makeGui = function(parentGui, args = {}) {
             }
         }
     });
-    circles.gui.add({
+    circles.deleteButton.addHelp('Deletes the currently selected circle, which is highlighted yellow. Deletes its controlled intersections.')
+    circles.selectNothingButton=circles.gui.add({
         type: 'button',
         buttonText: 'select nothing',
         onClick: function() {
             circles.selected = false;
             circles.otherSelected = false;
             intersections.selected = false;
+            circles.activateUI();
+            intersections.activateUI();
             basic.drawCirclesIntersections();
         }
     });
+    circles.selectNothingButton.addHelp('Deselects circles. Use to get rid of highlighting.');
     circles.activateUI();
 };
 
@@ -288,11 +324,15 @@ circles.makeGui = function(parentGui, args = {}) {
  */
 circles.activateUI = function() {
     circles.deleteButton.setActive(guiUtils.isObject(circles.selected));
+    circles.selectNothingButton.setActive(guiUtils.isObject(circles.selected));
     let message = 'Selected: ';
+    circles.collection.forEach(circle => circle.canChangeController.label.style.backgroundColor = '#00000000');
     if (guiUtils.isObject(circles.selected)) {
         message += '<strong>' + circles.selected.id + '</strong>';
+        circles.selected.canChangeController.label.style.backgroundColor = '#ffffaa';
         if (guiUtils.isObject(circles.otherSelected)) {
             message += ' and ' + circles.otherSelected.id;
+            circles.otherSelected.canChangeController.label.style.backgroundColor = '#f8f8f8';
         }
     } else {
         message += 'none';

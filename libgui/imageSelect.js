@@ -460,9 +460,81 @@ ImageSelect.prototype.addUserImage = function(file, selectThis = false) {
     }
 };
 
+const fileReader = new FileReader();
+
+/**
+ * read image files and add to image choices
+ * @method ImageSelect#readFiles
+ * @param {object} files
+ */
+ImageSelect.prototype.readFiles = function(files) {
+    let currentFileNumber = -1;
+    let selectionChoiceUpdated = false; // for selecting the first image in files
+    const imageSelect = this;
+
+    // load next file only if it is an image file and not yet in the options
+    // if in options and selection not updated, then set selected value
+    function loadNextFile() {
+        var file;
+        currentFileNumber += 1; // advance to next file
+        while (currentFileNumber < files.length) {
+            file = files[currentFileNumber];
+            const fileNameParts = file.name.split('.');
+            // use only image files (for window drag and drop)
+            if (guiUtils.isGoodImageFile(file.name)) {
+                const name = fileNameParts[0]; // filename without extension, use as name of selection 
+                // load only once 
+                if (imageSelect.findIndex(name) < 0) {
+                    fileReader.readAsDataURL(file);
+                    return;
+                } else if (!selectionChoiceUpdated) {
+                    // set selection to the first previously loaded preset
+                    imageSelect.setValue(name);
+                    imageSelect.onChange();
+                    selectionChoiceUpdated = true;
+                }
+            }
+            // nothing loaded, look at next file
+            currentFileNumber += 1;
+        }
+    }
+
+    fileReader.onload = function() {
+        // we know that file is a good image file and it is not yet an option
+        const file = files[currentFileNumber];
+        const fileNameParts = file.name.split('.');
+        const name = fileNameParts[0]; // filename without extension, use as name of selection  
+        // load image from file reader
+        // fileReader.result is the dataURL for the image
+        const option = {};
+        option.name = name;
+        option.icon = fileReader.result;
+        option.value = fileReader.result;
+        imageSelect.addOptions(option);
+        // make the loaded image potentially visible
+        const index = imageSelect.findIndex(fileReader.result);
+        if (index >= 0) {
+            imageSelect.makeImageButtonVisible(imageSelect.popupImageButtons[index]);
+            imageSelect.loadImages();
+            // set selection to the first loaded image
+            if (!selectionChoiceUpdated) {
+                imageSelect.setValue(name);
+                imageSelect.onChange();
+                selectionChoiceUpdated = true;
+            }
+        }
+        loadNextFile();
+    };
+
+    fileReader.onerror = function() {
+        loadNextFile();
+    };
+
+    loadNextFile();
+};
+
 // texts for the button and the popup for loading user images
 ImageSelect.addImageButtonText = "add images";
-ImageSelect.addImagePopupText = "drop images here!";
 
 /**
  * make an add image button for opening user images
@@ -482,7 +554,6 @@ ImageSelect.prototype.makeAddImageButton = function(parent) {
     button.setFontSize(this.design.buttonFontSize);
 
     // adding events
-    // maybe needs to be overwritten
     const imageSelect = this;
 
     button.onInteraction = function() {
@@ -491,14 +562,7 @@ ImageSelect.prototype.makeAddImageButton = function(parent) {
 
     // this is the callback to be called via the file input element after all files have been choosen by the user
     button.onFileInput = function(files) {
-        // files is NOT an array
-        let selectThis = true;
-        for (let i = 0; i < files.length; i++) {
-            const file = files[i];
-            imageSelect.addUserImage(file, selectThis);
-            // select only the first good image file
-            selectThis = selectThis && !guiUtils.isGoodImageFile(file.name);
-        }
+        imageSelect.readFiles(files);
     };
 
     return button;
@@ -512,15 +576,6 @@ ImageSelect.prototype.makeAddImageButton = function(parent) {
  * @method ImageSelect#addDragAndDrop
  */
 ImageSelect.prototype.addDragAndDrop = function() {
-    // write that we can drop images into the popup
-    const messageDiv = document.createElement("div");
-    messageDiv.innerText = ImageSelect.addImagePopupText;
-    guiUtils.fontSize(this.design.buttonFontSize + "px", messageDiv)
-        .paddingBottom(this.popup.design.popupPadding + "px");
-    this.popup.controlDiv.insertBefore(messageDiv, this.popup.closeButton.element);
-
-    // adding events
-    // maybe needs to be overwritten
     const imageSelect = this;
 
     // we need dragover to prevent default loading of image, even if dragover does nothing else
@@ -531,15 +586,27 @@ ImageSelect.prototype.addDragAndDrop = function() {
     this.popup.mainDiv.ondrop = function(event) {
         event.preventDefault();
         const files = event.dataTransfer.files;
-        // event.dataTransfer.files is NOT an array
-        let selectThis = true;
-        for (let i = 0; i < files.length; i++) {
-            const file = files[i];
-            imageSelect.addUserImage(file, selectThis);
-            // select only the first good image file
-            selectThis = selectThis && !guiUtils.isGoodImageFile(file.name);
-        }
+        imageSelect.readFiles(files);
     };
+};
+
+/**
+ * add drag and drop to the window
+ * remove it from the popup, in case it is there
+ * @method ImageSelect#addDragAndDropWindow
+ */
+ImageSelect.prototype.addDragAndDropWindow = function() {
+    const imageSelect = this;
+    this.popup.mainDiv.ondragover = function(event) {};
+    this.popup.mainDiv.ondrop = function(event) {};
+    window.ondragover = function(event) {
+        event.preventDefault();
+    };
+    window.addEventListener('drop', function(event) {
+        event.preventDefault();
+        const files = event.dataTransfer.files;
+        imageSelect.readFiles(files);
+    }, false);
 };
 
 /**

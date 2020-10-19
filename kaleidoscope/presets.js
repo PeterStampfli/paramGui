@@ -41,20 +41,21 @@ presets.makeGui = function(parentGui, args = {}) {
         type: 'selection',
         params: presets,
         property: 'selectedValue',
-        labelText: 'choices',
+        labelText: '',
         options: presets.collection,
         onChange: function() {
             presets.useSelectedValue();
         }
-    });
+    }).addHelp('Choose from this list of predefined circle and intersection configurations. You can add your own preset files with JSON definitions to this list. They have to be *.txt files. Use the "add saved" button or drag and drop files on the window');
     // load presets
-    SelectValues.addObjectsButtonText = "add presets (*.txt-files)";
+    SelectValues.addObjectsButtonText = "add saved";
     presets.selectionController.acceptUserObjects();
+    presets.selectionController.addDragAndDropWindow();
     // save preset
     // Filename will be name of preset, file content is JSON of properties
     presets.saveButton = gui.add({
         type: "button",
-        buttonText: "save kaleidoscope",
+        buttonText: "save",
         minLabelWidth: 20,
         onClick: function() {
             guiUtils.saveTextAsFile(basic.getJSON(), presets.saveName.getValue());
@@ -68,8 +69,8 @@ presets.makeGui = function(parentGui, args = {}) {
         minLabelWidth: 20
     });
     presets.saveName.addSpan('.txt');
+    presets.saveName.addHelp('Save the current configuration of circles and intersections as JSON in a *.txt file. The file name will be used as its name.');
 };
-
 
 /**
  * set the selected preset value from index to the presets.collection

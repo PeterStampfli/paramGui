@@ -41,15 +41,18 @@ export function Circle(parentGui, properties) {
     this.centerX = 0;
     this.centerY = 0;
     this.mapType = 'inside -> out';
+    this.osInterpolation = 1; // interpolation for ortho-stereographic projection
     this.color = '#000000'; // color for drawing a circle
+    // unique id, if circles are deleted the id is not related to index in circles.collection
     this.id = 0;
-    // overwrite defaults with fields of the parameter object                                        // unique id, if circles are deleted the id is not related to index in circles.collection
+    // overwrite defaults with fields of the parameter object  
     if (guiUtils.isObject(properties)) {
         Object.assign(this, properties);
     }
     this.setMapProperties(this.mapType);
     // for speeding up the mapping
     this.radius2 = this.radius * this.radius;
+    this.updateOSParameters();
     // the collection of the circle's intersections
     this.intersections = [];
 
@@ -74,6 +77,9 @@ export function Circle(parentGui, properties) {
             basic.drawCirclesIntersections(); // no new map
         }
     });
+    if (circles.collection.length === 0) {
+        this.canChangeController.addHelp('You can fix the position and radius of the circle. Prevents changes upon adding controlled intersections.');
+    }
 
     this.centerXController = this.gui.add({
         type: 'number',
@@ -81,7 +87,10 @@ export function Circle(parentGui, properties) {
         initialValue: this.centerX,
         onChange: function(centerX) {
             circles.setSelected(circle);
-            circle.tryPosition(centerX, circle.centerY);
+            const success = circle.tryPosition(centerX, circle.centerY);
+            if (!success) {
+                alert('Fail: Cannot change position');
+            }
         }
     });
     this.centerYController = this.centerXController.add({
@@ -90,10 +99,12 @@ export function Circle(parentGui, properties) {
         initialValue: this.centerY,
         onChange: function(centerY) {
             circles.setSelected(circle);
-            circle.tryPosition(circle.centerX, centerY);
+            const success = circle.tryPosition(circle.centerX, centerY);
+            if (!success) {
+                alert('Fail: Cannot change position');
+            }
         }
     });
-
     this.radiusController = this.centerYController.add({
         type: 'number',
         initialValue: this.radius,
@@ -101,9 +112,16 @@ export function Circle(parentGui, properties) {
         min: 0,
         onChange: function(radius) {
             circles.setSelected(circle);
-            circle.tryRadius(radius);
+            const success = circle.tryRadius(radius);
+            circle.updateOSParameters();
+            if (!success) {
+                alert('Fail: Cannot change radius');
+            }
         }
     });
+    if (circles.collection.length === 0) {
+        this.radiusController.addHelp('Change the position of the center and the radius: Type numbers direectly or use the mouse wheel to change the digit at the right of the cursor. Use ctrl-mouse drag on the image to change the position. Ctrl-mouse wheel changes the radius. If the circle has controlled intersections, then changing on quantity will automatically change others.');
+    }
 
     this.mapTypeController = this.gui.add({
         type: 'selection',
@@ -113,31 +131,69 @@ export function Circle(parentGui, properties) {
         width: 100,
         options: ['inside -> out', 'outside -> in', 'no mapping', 'inverting view', 'logarithmic view', 'ortho-stereographic view'],
         onChange: function(mapType) {
-            console.log('map type selected', mapType);
             circles.setSelected(circle);
             // if map direction changes, try new direction
             if ((mapType === 'inside -> out') && !circle.isInsideOutMap) {
                 circle.isInsideOutMap = true; // we want inside->out map
                 // check if successful
                 const success = circle.adjustToIntersections();
-                if (!success) {
-                    // failing to change direction, change selection
+                if (success) {
+                    intersections.activateUI();
+                } else {
+                    // failing to change direction, reset selection
                     circle.mapTypeController.setValueOnly('outside -> in');
+                    alert('Fail: Cannot change map direction');
                 }
             } else if ((mapType === 'outside -> in') && circle.isInsideOutMap) {
                 circle.isInsideOutMap = false; // we want outside->in map
                 // check if successful
                 const success = circle.adjustToIntersections();
-                if (!success) {
-                    // failing to change direction, change selection
+                if (success) {
+                    intersections.activateUI();
+                } else {
+                    // failing to change direction, reset selection
                     circle.mapTypeController.setValueOnly('inside -> out');
+                    alert('Fail: Cannot change map direction');
                 }
+            }
+            if (mapType === 'ortho-stereographic view') {
+                circle.osInterpolationController.show();
+            } else {
+                circle.osInterpolationController.hide();
             }
             // set properties of map, may have changed
             circle.setMapProperties(circle.mapTypeController.getValue());
             basic.drawMapChanged();
         }
     });
+    if (circles.collection.length === 0) {
+        let helpText = '<strong>outside -> in:</strong> The circle is part of the kaleidoscope. It inverts points lying outside into its inside.<br>';
+        helpText += '<strong>inside -> out:</strong> The circle is part of the kaleidoscope. It inverts points lying inside into its outside.<br>';
+        helpText += '<strong>no mapping:</strong> The circle does nothing. Switch it off and to see what it does. Use it for borders of the Poincare disc.<br>';
+        helpText += '<strong>inverting view:</strong> Inverts the kaleidoscopic image. Transforms circles passing through its center into straight lines.<br>';
+        helpText += '<strong>logarithmic view:</strong> Transforms pixel position using the complex logarithm before making the kaleidoscopic image. Concentric circles become straight lines.<br>';
+        helpText += '<strong>ortho-stereographic view:</strong> Shows an orthographic view of a sphere that fits into the circle. The kaleidoscopic image inside the circle is mapped onto the sphere using a stereographic projection. The outside of the circle is not changed.<br>';
+        this.mapTypeController.addHelp(helpText);
+    }
+
+    this.osInterpolationController = this.gui.add({
+        type: 'number',
+        params: this,
+        property: 'osInterpolation',
+        min: 0,
+        max: 1,
+        labelText: 'interpolation',
+        usePopup: false,
+        onChange: function() {
+            circle.updateOSParameters();
+            basic.drawMapChanged();
+        }
+    });
+    if (circles.collection.length === 0) {
+        this.osInterpolationController.addHelp('Interpolates between direct view and the ortho-stereographic view.');
+    }
+    this.osInterpolationController.createLongRange();
+    this.osInterpolationController.hide();
 
     this.colorController = this.gui.add({
         type: 'color',
@@ -152,6 +208,9 @@ export function Circle(parentGui, properties) {
             }
         }
     });
+    if (circles.collection.length === 0) {
+        this.colorController.addHelp('Choose the color for drawing this circle. Also determines its color for the "Indra' + "'" + 'Pearls" drawing option.');
+    }
 }
 
 /**
@@ -201,6 +260,15 @@ Circle.prototype.setMapProperties = function(mapType) {
             this.isInTarget = this.noMap;
             break;
     }
+};
+
+/**
+ * calculate parameterss for the ortho-stereographic view
+ * @method Circle#updateOSParameters
+ */
+Circle.prototype.updateOSParameters = function() {
+    this.osFactor = 1 + Math.sqrt(Math.max(0, 1 - this.osInterpolation));
+    this.osx2r2 = this.osInterpolation / this.radius2;
 };
 
 /**
@@ -470,8 +538,7 @@ Circle.prototype.adjustPositionTwoIntersections = function(radius) {
 };
 
 /**
- * circle with two intersections, try a given new position, 
- * adjust mainly circle radius and partly position to intersections
+ * circle with two intersections, try a given new position, adjust circle radius and position
  * return true if successful, false if fails
  * does not change the circle for fail
  * @method Circle#adjustRadiusTwoIntersections
@@ -634,6 +701,7 @@ Circle.prototype.adjustThreeIntersections = function(pos1, pos2) {
  * if success update UI to new values and draw image
  * @method tryRadius
  * @param {number} radius
+ * @return boolean true if successful and case solved
  */
 Circle.prototype.tryRadius = function(radius) {
     if (this.canChange) {
@@ -661,6 +729,9 @@ Circle.prototype.tryRadius = function(radius) {
             intersections.activateUI();
             basic.drawMapChanged();
         }
+        return success;
+    } else {
+        return false;
     }
 };
 
@@ -733,6 +804,9 @@ Circle.prototype.adjustToIntersections = function() {
                 break;
             case 2:
                 success = this.adjustPositionTwoIntersections(this.radius);
+                if (!success) {
+                    success = this.adjustRadiusTwoIntersections(this.centerX, this.centerY);
+                }
                 break;
             case 3:
                 success = this.adjustThreeIntersections();
@@ -804,8 +878,7 @@ Circle.prototype.draw = function(highlight = 0) {
             // basic drawing without highlight
             output.setLineWidth(map.linewidth);
             context.strokeStyle = this.color;
-            if (this.mapType === 'inverting view') {
-
+            if ((this.mapType === 'inverting view') || (this.mapType === 'ortho-stereographic view') || (this.mapType === 'logarithmic view')) {
                 const d = 2 * map.linewidth * output.coordinateTransform.totalScale;
                 const D = 10 * map.linewidth * output.coordinateTransform.totalScale;
                 context.beginPath();
@@ -1028,7 +1101,7 @@ Circle.prototype.orthoStereo = function(position) {
     const dy = position.y - this.centerY;
     const d2 = dx * dx + dy * dy;
     if (d2 < this.radius2) {
-        const factor = 1 / (1 + Math.sqrt(1 - d2 / this.radius2));
+        const factor = this.osFactor / (1 + Math.sqrt(1 - d2 * this.osx2r2));
         position.x = this.centerX + factor * dx;
         position.y = this.centerY + factor * dy;
     }
@@ -1073,6 +1146,9 @@ Circle.prototype.dragAction = function(event) {
             // try dragging the circle away from its mirrored position
             this.tryPosition(flippedX + event.dx, flippedY + event.dy);
         }
+        if (!success) {
+            alert('Fail: Cannot change position');
+        }
     }
 };
 
@@ -1085,16 +1161,22 @@ Circle.prototype.dragAction = function(event) {
 Circle.prototype.wheelAction = function(event) {
     if (this.canChange) {
         const zoomFactor = (event.wheelDelta > 0) ? Circle.zoomFactor : 1 / Circle.zoomFactor;
-        this.tryRadius(this.radius * zoomFactor);
+        const success = this.tryRadius(this.radius * zoomFactor);
+        this.updateOSParameters();
+        if (!success) {
+            alert('Fail: Cannot change radius');
+        }
     }
 };
 
 /**
  * destroy the circle and all that depends on it
+ * remove from circles
  * make that there are no more references to this circle hanging around
  * @method Circle#destroy
  */
 Circle.prototype.destroy = function() {
+    circles.remove(this);
     while (this.intersections.length > 0) {
         this.intersections[this.intersections.length - 1].destroy();
     }
@@ -1104,5 +1186,4 @@ Circle.prototype.destroy = function() {
     this.centerXController.destroy();
     this.mapTypeController.destroy();
     this.colorController.destroy();
-    circles.remove(this);
 };

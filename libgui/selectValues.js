@@ -115,6 +115,72 @@ SelectValues.prototype.addOptions = function(options) {
 
 // text for the button for loading user defined objects (presets)
 SelectValues.addObjectsButtonText = "add";
+const fileReader = new FileReader();
+
+/**
+ * read and parse JSON *.txt files that define objects
+ * @method SelectValues#readJSONFiles
+ * @param {object} files
+ */
+SelectValues.prototype.readJSONFiles = function(files) {
+    let currentFileNumber = -1; // loadNextFile() first advances file number
+    let selectionChoiceUpdated = false; // for selecting the first preset in files
+    const selectValues = this;
+
+    // load next file only if it is a *.txt file and not yet in the options
+    // if in options and selection not updated, then set selected value
+    function loadNextFile() {
+        var file;
+        currentFileNumber += 1; // advance to next file
+        while (currentFileNumber < files.length) {
+            file = files[currentFileNumber];
+            const fileNameParts = file.name.split('.');
+            // use only *.txt files (for window drag and drop)
+            if (fileNameParts[1] === 'txt') {
+                const name = fileNameParts[0]; // filename without extension, use as name of selection 
+                // load only once 
+                if (selectValues.findIndex(name) < 0) {
+                    fileReader.readAsText(file);
+                    return;
+                } else if (!selectionChoiceUpdated) {
+                    // set selection to the first previously loaded preset
+                    selectValues.setValue(name);
+                    selectValues.onChange();
+                    selectionChoiceUpdated = true;
+                }
+            }
+            // nothing loaded, look at next file
+            currentFileNumber += 1;
+        }
+    }
+
+    fileReader.onload = function() {
+        // we know that the file is a *.txt file and that the name is not yet in the options
+        const file = files[currentFileNumber];
+        const fileNameParts = file.name.split('.');
+        const name = fileNameParts[0]; // filename without extension, use as name of selection  
+        const result = fileReader.result;
+        try {
+            const value = JSON.parse(result); // recover object from JSON, catch syntax errors
+            selectValues.addOption(name, value);
+            if (!selectionChoiceUpdated) {
+                // set selection to the first loaded preset
+                selectValues.setValue(name);
+                selectValues.onChange();
+                selectionChoiceUpdated = true;
+            }
+        } catch (err) {
+            alert('JSON syntax error in: ' + file.name);
+        }
+        loadNextFile();
+    };
+
+    fileReader.onerror = function() {
+        loadNextFile();
+    };
+
+    loadNextFile();
+};
 
 /**
  * make an add values button for opening user defined objects (presets)
@@ -136,29 +202,26 @@ SelectValues.prototype.makeAddObjectsButton = function(parent) {
 
     // this is the callback to be called via the file input element after all files have been choosen by the user
     button.onFileInput = function(files) {
-        let currentFileNumber = 0;
-        const fileReader = new FileReader();
-
-        fileReader.onload = function() {
-            const file = files[currentFileNumber];
-            const name = file.name.split('.')[0]; // filename without extension        const result = fileReader.result;
-            const result = fileReader.result;
-            const value = JSON.parse(result); // recover object from JSON
-            selectValues.addOption(name, value);
-            if (currentFileNumber === 0) {
-                selectValues.setValue(value);
-                selectValues.onChange();
-            }
-            currentFileNumber += 1;
-            if (currentFileNumber < files.length) {
-                fileReader.readAsText(files[currentFileNumber]);
-            }
-        };
-
-        fileReader.readAsText(files[0]);
+        selectValues.readJSONFiles(files);
     };
 
     return button;
+};
+
+/**
+ * add drag and drop to the window (for adding JSON objects)
+ * @method SelectValues#addDragAndDropWindow
+ */
+SelectValues.prototype.addDragAndDropWindow = function() {
+    const selectValues = this;
+    window.ondragover = function(event) {
+        event.preventDefault();
+    };
+    window.addEventListener('drop', function(event) {
+        event.preventDefault();
+        const files = event.dataTransfer.files;
+        selectValues.readJSONFiles(files);
+    }, false);
 };
 
 /**
@@ -192,7 +255,7 @@ SelectValues.prototype.getValue = function() {
 };
 
 /**
- * find the index for a given value
+ * find the index for a given value, only for basic values, does not compare objects
  * searches first the selection values, then the labels
  * @method SelectValues#findIndex
  * @param {whatever} value

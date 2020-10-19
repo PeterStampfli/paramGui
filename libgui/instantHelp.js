@@ -63,13 +63,14 @@ InstantHelp.spaceWidth = 5;
 
 InstantHelp.popup = new Popup({
     popupHasControl: false,
-    popupInnerWidth: 400,
+    popupInnerWidth: 500,
     popupFontSize: 18,
     popupBorder: "none"
 });
 
 InstantHelp.popup.close();
 InstantHelp.handleActiveColor = "#ffff88";
+InstantHelp.popup.contentDiv.style.textAlign = "left";
 
 /**
  * set fontsize of the handle, in px

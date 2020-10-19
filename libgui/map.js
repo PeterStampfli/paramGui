@@ -28,13 +28,6 @@ map.zoomFactor = 1.04;
 // and rotating, angle step, in degrees
 map.angleStep = 1;
 
-// default input image for tests
-// set its absolute path for use in a internet site:
-// http://someSite.com/images/testimage.jpg or something similar
-// or use a relative path that goes down to the "root'"
-
-map.inputImage = '../libgui/testimage.jpg';
-
 // dimensions, private, required to check if resizing arrays is required
 // then same as for output canvas
 
@@ -57,7 +50,7 @@ map.sizeArray = new Float32Array(1);
 map.maxSize = 0; // maximum value
 
 // greying out the control image
-map.controlPixelsAlpha = 128;
+map.controlPixelsAlpha = 100;
 
 // fractional length of image region checked initially
 map.initialImageCovering = 0.75;
@@ -313,6 +306,7 @@ map.callDrawImageVeryHighQuality = function() {
     map.drawingInputImage = true;
     map.allImageControllersHide();
     map.inputImageControllersShow();
+    map.drawImageVeryHighQuality();
 };
 map.callDrawRegions = function() {
     map.drawingInputImage = false;
@@ -515,6 +509,9 @@ map.addControls = function() {
             map.drawImageChanged();
         }
     });
+    if (map.colorControllers.length===0){
+        colorController.addHelp('You can switch off pixels that end up in a certain region after the mapping. They will become transparent black and you will see the background color of the canvas. You can choose the color used for pixels related to the region.');
+    }
     map.colorControllers.push(colorController);
 };
 
@@ -755,7 +752,7 @@ map.drawDivergence = function() {
         alpha: 255
     };
     const white = Pixels.integerOfColor(color);
-    const factor = 255.9 / (Math.abs(map.divergenceSaturation - map.divergenceThreshold) + 0.01);
+    const factor = 255.9 / (Math.max(0, map.divergenceSaturation - map.divergenceThreshold) + 0.01);
     const iMaxSize = 1 / map.maxSize;
     console.log(iMaxSize)
     const length = map.width * map.height;
@@ -871,8 +868,8 @@ map.sizeArrayUpdate = function() {
                     // surface results from absolute value of the cross product
                     // the size is its square root
                     size = Math.sqrt(Math.abs(ax * by - ay * bx));
-             map.maxSize = Math.max(map.maxSize, size);
-                   sizeArray[index] = size;
+                    map.maxSize = Math.max(map.maxSize, size);
+                    sizeArray[index] = size;
                 }
                 index++;
             }
@@ -1177,6 +1174,7 @@ map.makeShowingGui = function(parentGui, args = {}) {
             map.drawImageChanged();
         }
     });
+    map.darkController.addHelp('Sets contrast between odd and even number of iterations. Use zero to get flat color.');
     // a hidden canvas for the input image
     map.inputCanvas = document.createElement('canvas'); // has default width and height
     map.inputCanvas.style.display = 'none';
@@ -1184,12 +1182,14 @@ map.makeShowingGui = function(parentGui, args = {}) {
     map.inputCanvasContext = map.inputCanvas.getContext('2d');
     map.inputImageLoaded = false;
     // setup image selection
+    map.inputImage='../libgui/dormouse.jpg';
     map.imageController = gui.add({
         type: 'image',
         params: map,
         property: 'inputImage',
         options: {
-            testimage: map.inputImage,
+            dormouse: '../libgui/dormouse.jpg',
+            'railway station':'../libgui/railway station.jpg'
         },
         labelText: 'input image',
         onChange: function() {
@@ -1205,6 +1205,8 @@ map.makeShowingGui = function(parentGui, args = {}) {
             map.drawImageChangedCheckMapUpdate();
         }
     });
+    map.imageController.addHelp('Choose the input image that will be mapped onto the kaleidoscopic structure. You can use your own images (*.jpg and *.png files). Use thee "add images" button or ddrag and drop on the window.');
+
     // setup control canvas
     // a div that contains the control canvas to 
     // avoid that the lower part of the gui 'jumps' if the input image changes
@@ -1262,6 +1264,7 @@ map.makeShowingGui = function(parentGui, args = {}) {
         map.setupMapImageTransform();
         map.drawImageChanged();
     };
+    map.inputTransform.resetButton.addHelp('Above you see the input image and its parts used for the kaleidoscopic image. Unused pixels are greyed out. You can change this using mouse drag on the image for translation, mouse wheel to zoom and shift-mouse wheel to rotate. The current mouse position is the center for zoom and rotation.');
 
     // the mouse events on the control canvas
     map.mouseEvents = new MouseEvents(map.controlCanvas);

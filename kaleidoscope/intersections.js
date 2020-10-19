@@ -140,7 +140,7 @@ intersections.set = function(input) {
  * @method intersections.draw
  */
 intersections.draw = function() {
-    if (intersections.visible) {
+    if (intersections.visible && circles.visible) {
         intersections.collection.forEach(intersection => intersection.draw(0));
         if (intersections.selected) {
             intersections.selected.draw(1);
@@ -174,6 +174,7 @@ intersections.makeGui = function(parentGui, args = {}) {
             intersections.draw();
         }
     });
+    intersections.visibleButton.addHelp('You can hide the intersection symbols to get a neater image.');
     intersections.addButton = intersections.gui.add({
         type: 'button',
         buttonText: 'add intersection',
@@ -181,12 +182,17 @@ intersections.makeGui = function(parentGui, args = {}) {
             // add an intersection between the two selected circles
             // button cannot be clicked if this is not possible
             const n = Intersection.estimateN(circles.selected, circles.otherSelected);
-            console.log('estimated n',n);
-            intersections.add(circles.selected, circles.otherSelected, n);
-            intersections.selected.tryN(n); // this adjusts the circles
+            const intersection = intersections.add(circles.selected, circles.otherSelected, n);
+            const success = intersections.selected.tryN(n); // this adjusts the circles, may fail ?
+            if (!success) {
+                alert('Fail: Cannot add such an intersection');
+                intersection.destroy();
+            }
+            intersections.activateUI();
             basic.drawMapChanged();
         }
     });
+    intersections.addButton.addHelp('Adds a controlled intersection between the two selected circles, highlighted yellow and white. The angle of such an intersection is an integer fraction of 180 degrees. You can only add it if the two circles intersect with a similar angle.');
     intersections.deleteButton = intersections.gui.add({
         type: 'button',
         buttonText: 'delete selected',
@@ -197,6 +203,7 @@ intersections.makeGui = function(parentGui, args = {}) {
             }
         }
     });
+    intersections.deleteButton.addHelp('Deletes the controlled intersection highlighted in yellow.');
     intersections.activateUI();
 };
 
@@ -212,9 +219,9 @@ intersections.canAdd = function() {
     // and these two do not already have an intersection ...
     canDo = canDo && (intersections.indexOf(circles.selected, circles.otherSelected) < 0);
     // and at least one of the circles can get a new intersection
-    const selectedCan=circles.selected.canChange&&(circles.selected.intersections.length<=2); 
-    const otherSelectedCan=circles.otherSelected.canChange&&(circles.otherSelected.intersections.length<=2);
-    canDo = canDo && (selectedCan||otherSelectedCan);
+    const selectedCan = circles.selected.canChange && (circles.selected.intersections.length <= 2);
+    const otherSelectedCan = circles.otherSelected.canChange && (circles.otherSelected.intersections.length <= 2);
+    canDo = canDo && (selectedCan || otherSelectedCan);
     return canDo;
 };
 
@@ -229,6 +236,10 @@ intersections.activateUI = function() {
     intersections.addButton.setActive(intersections.canAdd());
     // UI of the intersections
     intersections.collection.forEach(intersection => intersection.activateUI());
+    intersections.collection.forEach(intersection => intersection.nController.label.style.backgroundColor = '#00000000');
+    if (guiUtils.isObject(intersections.selected)) {
+        intersections.selected.nController.label.style.backgroundColor = '#eeeeaa';
+    }
 };
 
 /**

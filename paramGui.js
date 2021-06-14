@@ -537,13 +537,13 @@ ParamGui.prototype.createTitle = function() {
         }
         // create close and open buttons if wanted
         // small arrows (as for file system), before name
-        if (this.closeOnTop) {   
-            this.closeOpenButton = new Button("▼&ensp; "+this.name, this.titleDiv);
+        if (this.closeOnTop) {
+            this.closeOpenButton = new Button("▼&ensp; " + this.name, this.titleDiv);
             this.closeOpenButton.colorStyleForTransparentSpan(design.titleColor);
             this.closeOpenButton.element.style.borderRadius = "0px";
             this.closeOpenButton.element.style.borderStyle = "none";
             this.closeOpenButton.element.style.outline = "none";
-        this.closeOpenButton.element.style.fontWeight = design.titleFontWeight;
+            this.closeOpenButton.element.style.fontWeight = design.titleFontWeight;
             this.closeOpenButton.setFontSize(design.titleFontSize);
             this.closeOpenButton.onInteraction = function() {
                 ParamGui.closePopups();
@@ -558,11 +558,11 @@ ParamGui.prototype.createTitle = function() {
             this.titleDiv.appendChild(spanElement);
             spanElement.style.display = "inline-block";
             spanElement.style.width = design.closeOpenButtonWidth + "px";
-        this.titleLabel = document.createElement("span");
-        this.titleLabel.innerHTML = this.name;
-        this.titleDiv.appendChild(this.titleLabel);
+            this.titleLabel = document.createElement("span");
+            this.titleLabel.innerHTML = this.name;
+            this.titleDiv.appendChild(this.titleLabel);
         }
-         this.titleDiv.style.fontSize = design.titleFontSize + "px";
+        this.titleDiv.style.fontSize = design.titleFontSize + "px";
         this.titleDiv.style.fontWeight = design.titleFontWeight;
         // attach to the dom only after all changes have been done
         // might accelerate things (page reflow only once)
@@ -668,7 +668,7 @@ ParamGui.prototype.show = function() {
 ParamGui.prototype.open = function() {
     if (this.closeOnTop) {
         this.closed = false;
-       this.closeOpenButton.setText("▼&ensp; "+this.name);
+        this.closeOpenButton.setText("▼&ensp; " + this.name);
         const paramGui = this;
         this.closeOpenButton.onClick = function() {
             paramGui.close();
@@ -685,7 +685,7 @@ ParamGui.prototype.open = function() {
 ParamGui.prototype.close = function() {
     if (this.closeOnTop) {
         this.closed = true;
-        this.closeOpenButton.setText("►&ensp; "+this.name);
+        this.closeOpenButton.setText("►&ensp; " + this.name);
         const paramGui = this;
         this.closeOpenButton.onClick = function() {
             paramGui.open();
@@ -1055,40 +1055,6 @@ ParamGui.prototype.addColor = function(theParams, theProperty) {
     }
     args.type = "color";
     return this.add(args);
-};
-
-/**
- * add a logger
- * best put it in an extra gui
- * or wrap it onto a folder logger=gui.addFolder(someNameString).addLogger();
- * @method ParamGui#addLogger
- * @return {Logger} object
- */
-ParamGui.prototype.addLogger = function() {
-    const container = document.createElement("div");
-    // make a regular spacing between elements
-    container.style.padding = this.design.paddingVertical + "px";
-    container.style.fontSize = this.design.labelFontSize + "px";
-    container.style.height = this.design.loggerHeight + "px";
-    container.style.backgroundColor = this.design.loggerBackgroundColor;
-    container.style.color = this.design.loggerColor;
-    container.style.overflowY = "auto";
-    this.bodyDiv.appendChild(container);
-    const logger = new Logger(this, container);
-    return logger;
-};
-
-/**
- * add a transformation of coordinates
- * shift and scaling, optional rotation
- * @method ParamGui#addCoordinateTransform
- * @param {canvas} canvas - optional, default==null, transform applies to canvas context
- * @param {boolean} withRotation - optional, default==false
- * @param {float} stepSize - optional, step size for UI, default is 0.001 * @return coordinateTransform object
- */
-ParamGui.prototype.addCoordinateTransform = function(canvas = null, withRotation = false, stepSize = 0.001) {
-    const coordinateTransform = new CoordinateTransform(this, canvas, withRotation, stepSize);
-    return coordinateTransform;
 };
 
 /**

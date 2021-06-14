@@ -408,9 +408,16 @@ guiUtils.topPosition = function(theElement) {
 // saving on a file
 //================================================================================
 
-// save blob to a file using an off-screen a-tag element
+/**
+ * save blob to a file using an off-screen a-tag element
+ * optional callback
+ * @function saveBlobAsFile
+ * @param {Blob} blob
+ * @param {string} filename - with extension
+ * @param {function} callback -optional
+ */
 
-function saveBlobAsFile(blob, filename) {
+function saveBlobAsFile(blob, filename, callback = function() {}) {
     const objURL = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.style.display = "none";
@@ -420,6 +427,7 @@ function saveBlobAsFile(blob, filename) {
     a.click();
     a.remove();
     URL.revokeObjectURL(objURL);
+    callback();
 }
 
 /**
@@ -428,30 +436,33 @@ function saveBlobAsFile(blob, filename) {
  * @param {canvas} canvas
  * @param {string} filename - without extension
  * @param {string} extension - optional, 'png' or 'jpg', default is 'jpg'
+ * @param {function} callback - optional
  */
-guiUtils.saveCanvasAsFile = function(canvas, filename, extension = 'jpg') {
+guiUtils.saveCanvasAsFile = function(canvas, filename, extension = 'jpg', callback = function() {}) {
     if (extension === 'png') {
         canvas.toBlob(function(blob) {
-            saveBlobAsFile(blob, filename + '.png');
+            saveBlobAsFile(blob, filename + '.png', callback);
         }, 'image/png');
     } else {
         canvas.toBlob(function(blob) {
-            saveBlobAsFile(blob, filename + '.jpg');
+            saveBlobAsFile(blob, filename + '.jpg', callback);
         }, 'image/jpeg');
     }
 };
 
 /**
  * save a (text) string as a file
+ * for a new line use '/r/n'  (cariage return and new line)
  * @method guiUtils.saveTextAsFile
  * @param {String} text
- * @param {String} filename - without extension (will be .txt)
+ * @param {String} filename - without extension 
+ * @param {String} extension - optional, default is 'txt', use empty string if filename has extension
  */
-guiUtils.saveTextAsFile = function(text, filename) {
+guiUtils.saveTextAsFile = function(text, filename, extension = 'txt') {
     const blob = new Blob([text], {
         type: 'text/plain'
     });
-    saveBlobAsFile(blob, filename + '.txt');
+    saveBlobAsFile(blob, filename + extension);
 };
 
 // check byte order of the machine
@@ -495,104 +506,4 @@ guiUtils.arrayRepeat = function(array, n) {
     for (var i = n; i < length; i++) {
         array[i] = array[i - n];
     }
-};
-
-// numerics, finding zero of a function
-//=============================================
-
-const maxIter = 30;
-
-/**
- * find zero of a function using regula falsi
- * input interval must braket the zero
- * @method guiUtils.regulaFalsi
- * @param {function} fun - of a single variable
- * @param {number}x1 - one end of interval
- * @param {number}x2 - other end of interval
- * @param {number} acc - accuracy, abs(fun(x))<acc or bracket width<acc
- * @return number, position of zero of function fun, within +/- acc
- */
-
-guiUtils.regulaFalsi = function(fun, x1, x2, acc) {
-    let f1 = fun(x1);
-    let f2 = fun(x2);
-    if (f1 * f2 > 0) {
-        console.error('regulaFalsi: both ends of interval have same sign for function value');
-        console.log('x1', x1, f1);
-        console.log('x2', x2, f2);
-    }
-    // make that fun(x1)<0
-    if (f1 > 0) {
-        let h = f1;
-        f1 = f2;
-        f2 = h;
-        h = x1;
-        x1 = x2;
-        x2 = h;
-    }
-    let dx = x2 - x1;
-    for (var i = 0; i < maxIter; i++) {
-        // regula falsi step for speed
-        let x = x1 - dx * f1 / (f2 - f1); // x between x1 and x2
-        let f = fun(x);
-        if (f > 0) {
-            f2 = f;
-            x2 = x;
-        } else {
-            f1 = f;
-            x1 = x;
-        }
-        dx = x2 - x1;
-        if ((Math.abs(dx) < acc) || (Math.abs(f) < acc)) {
-            return x;
-        }
-        // bisection step for safety
-        x = (x1 + x2) / 2;
-        f = fun(x);
-        if (f > 0) {
-            f2 = f;
-            x2 = x;
-        } else {
-            f1 = f;
-            x1 = x;
-        }
-        dx = x2 - x1;
-    }
-    console.error('regulaFalsi: not converged');
-};
-
-
-/**
- * solve quadratic equation ax**2+bx+c=0
- * only for real solutions
- * solutions are in Fast.xLow and Fast.xHigh
- * @method guiUtils.quadraticEquation
- * @param {float} a - has to be diffferent from zero, check before !!!
- * @param {float} b
- * @param {float} c
- * @param {Vector2} data - x and y fields are the lower and higher solutions, data.x < data.y
- * @return {boolean} true if there are real solutions
- */
-guiUtils.quadraticEquation = function(a, b, c, data) {
-    var s1, s2;
-    const rootArg = b * b - 4 * a * c;
-    if (rootArg < 0) {
-        data.x = 0;
-        data.y = 0;
-        return false;
-    }
-    if (b > 0) {
-        s1 = 0.5 * (-b - Math.sqrt(rootArg)) / a;
-    } else {
-        s1 = 0.5 * (-b + Math.sqrt(rootArg)) / a;
-    }
-    s2 = c / a / s1;
-    if (s1 < s2) {
-        data.x = s1;
-        data.y = s2;
-    } else {
-        data.x = s2;
-        data.y = s1;
-    }
-    return true;
 };
